@@ -35,6 +35,10 @@ yarn-error.log*
 
 # vercel
 .vercel
+vercel_token.md
+
+# claude agent files
+/claude
 
 # typescript
 *.tsbuildinfo
