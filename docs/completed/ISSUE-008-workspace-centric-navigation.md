@@ -2,7 +2,7 @@
 
 **Type:** Feature / Design
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #8
 **Supersedes:** ISSUE-007 (cookie-based org switcher — no longer needed)
 

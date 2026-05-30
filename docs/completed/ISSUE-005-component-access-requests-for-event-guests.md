@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #5
 **Depends on:** ISSUE-004 (requires `event_members` and `event_member_components` tables + RLS helpers)
 
@@ -353,7 +353,7 @@ _This section is filled during implementation by /implement-issue. Do not edit m
 ### Coder Report
 
 **Date:** 2026-05-27
-**Status:** Complete — build passes (0 TypeScript errors)
+**Status:** Complete
 
 #### Step 1 — Migration
 
@@ -424,7 +424,7 @@ All 🔴 critical criteria are met. Two 🟡 medium and two 🔵 low items found
 ### Coder Revision Report
 
 **Date:** 2026-05-27
-**Status:** All 🟡 and 🔵 findings resolved — build passes (0 TypeScript errors)
+**Status:** Complete
 
 #### Fixes Applied
 

@@ -2,7 +2,7 @@
 
 **Type:** Bug
 **Priority:** P0
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #001
 
 ## Problem
