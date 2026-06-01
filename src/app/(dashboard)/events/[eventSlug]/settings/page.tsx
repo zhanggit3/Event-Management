@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Layers, ArrowLeft } from "lucide-react";
-import { AddComponentDialog, type ComponentTemplate, type EventWithComponents } from "@/components/add-component-dialog";
-import { ComponentListManager } from "@/components/component-list-manager";
+import { ArrowLeft } from "lucide-react";
 import { updateEvent, deleteEvent } from "@/app/actions/events";
 import { EventCollaboratorsPanel } from "@/components/event-collaborators-panel";
 
@@ -27,8 +25,6 @@ export default async function EventSettingsPage({ params }: PageProps) {
 
   let event: EventShape | null = null;
   let components: ComponentShape[] = [];
-  let templates: ComponentTemplate[] = [];
-  let otherEvents: EventWithComponents[] = [];
   let collaborators: CollaboratorShape[] = [];
   let isOrgAdmin = false;
 
@@ -90,22 +86,6 @@ export default async function EventSettingsPage({ params }: PageProps) {
         }));
       }
 
-      // Fetch org templates + system templates (organization_id IS NULL)
-      const { data: dbTemplates } = await supabase
-        .from("component_templates")
-        .select("id, name, slug, icon, color, description, tasks_json")
-        .or(`organization_id.eq.${dbEvent.organization_id},organization_id.is.null`)
-        .order("name");
-      templates = (dbTemplates ?? []) as ComponentTemplate[];
-
-      // Fetch other events in the org with their components (for clone tab)
-      const { data: dbOtherEvents } = await supabase
-        .from("events")
-        .select("id, name, slug, components(id, name, slug, icon, color)")
-        .eq("organization_id", dbEvent.organization_id)
-        .neq("id", dbEvent.id)
-        .order("created_at", { ascending: false });
-      otherEvents = (dbOtherEvents ?? []) as unknown as EventWithComponents[];
     }
   }
 
@@ -218,45 +198,6 @@ export default async function EventSettingsPage({ params }: PageProps) {
               </button>
             </div>
           </form>
-        </div>
-
-        {/* Components card */}
-        <div className="bg-white/[0.03] border border-white/[0.07] rounded-xl p-6 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-white/40" />
-                Components
-              </h2>
-              <p className="text-xs text-white/30 mt-0.5">
-                Add the modules your event needs.
-              </p>
-            </div>
-            <AddComponentDialog
-              eventId={event.id}
-              eventSlug={eventSlug}
-              templates={templates}
-              otherEvents={otherEvents}
-            />
-          </div>
-
-          {components.length === 0 ? (
-            <div className="text-center py-10">
-              <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.07] flex items-center justify-center mx-auto mb-3">
-                <Layers className="w-5 h-5 text-white/20" />
-              </div>
-              <p className="text-sm text-white/30">
-                No components yet. Click &quot;Add component&quot; to get started.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white/[0.03] border border-white/[0.07] rounded-xl p-5">
-              <ComponentListManager
-                components={components as Parameters<typeof ComponentListManager>[0]["components"]}
-                eventSlug={eventSlug}
-              />
-            </div>
-          )}
         </div>
 
         {/* External Collaborators panel — org admins only */}
