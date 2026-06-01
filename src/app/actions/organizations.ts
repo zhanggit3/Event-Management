@@ -15,19 +15,17 @@ export async function createOrganization(formData: FormData) {
 
   const slug = slugify(name);
 
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .insert({ name: name.trim(), slug })
-    .select()
-    .single();
+  // Atomic create (org + owner membership) via SECURITY DEFINER RPC. A plain
+  // insert().select() fails RLS: the creator can't read the new row back until
+  // they're a member, which is added in the same step. See migration
+  // create_organization_with_owner_security_definer.
+  const { error: orgError } = await supabase.rpc("create_organization_with_owner", {
+    p_name: name.trim(),
+    p_slug: slug,
+    p_is_workspace: false,
+  });
 
   if (orgError) return { error: orgError.message };
-
-  const { error: memberError } = await supabase
-    .from("organization_members")
-    .insert({ organization_id: org.id, user_id: user.id, role: "owner" });
-
-  if (memberError) return { error: memberError.message };
 
   revalidatePath("/");
   return { success: true };
@@ -62,19 +60,16 @@ export async function createWorkspace(formData: FormData) {
 
   const slug = slugify(name) + "-" + user.id.slice(0, 8);
 
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .insert({ name: name.trim(), slug, is_workspace: true })
-    .select()
-    .single();
+  // Atomic create via SECURITY DEFINER RPC — see createOrganization above.
+  // Workspaces are excluded from the org search SELECT policy, so the creator
+  // could never read the new workspace row back via a plain insert().select().
+  const { error: orgError } = await supabase.rpc("create_organization_with_owner", {
+    p_name: name.trim(),
+    p_slug: slug,
+    p_is_workspace: true,
+  });
 
   if (orgError) return { error: orgError.message };
-
-  const { error: memberError } = await supabase
-    .from("organization_members")
-    .insert({ organization_id: org.id, user_id: user.id, role: "owner" });
-
-  if (memberError) return { error: memberError.message };
 
   revalidatePath("/");
   return { success: true };
