@@ -350,3 +350,5 @@ Found during the user's manual testing; fixed live:
 All changes verified: `tsc --noEmit` clean, `next build` ✓, touched files lint-clean.
 
 ### PR Feedback Summary
+
+**PR #3 review (`/fix-pr-feedback`):** 1 PR comment received — the Vercel deploy bot (noise). 0 actionable review comments, 0 inline code comments, no human/automated reviewer. All checks pass (both Vercel preview deployments `Ready`); PR is `MERGEABLE` / `CLEAN`. No code changes required.

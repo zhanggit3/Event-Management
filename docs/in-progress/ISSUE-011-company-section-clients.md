@@ -331,3 +331,5 @@ All ten Acceptance Criteria are met, the evaluator found zero Critical/Medium is
 Verified: `tsc --noEmit` clean, `next build` ✓, touched files lint-clean; live policies confirmed (`UPDATE`/`DELETE` now admin-or-creator) and `clients.projects` column present.
 
 **Note (unchanged behavior):** the page still resolves a single org (Settings-style, prefers non-workspace). For a user who owns their workspace but is a member of another org, clients land in that other org. Creator-based management mitigates the impact; a per-org switcher remains out of scope.
+
+**PR #3 review (`/fix-pr-feedback`):** 1 PR comment received — the Vercel deploy bot (noise). 0 actionable review comments, 0 inline code comments, no human/automated reviewer. All checks pass (both Vercel preview deployments `Ready`); PR is `MERGEABLE` / `CLEAN`. No code changes required.
