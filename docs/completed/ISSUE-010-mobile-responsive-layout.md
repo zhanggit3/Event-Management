@@ -2,7 +2,7 @@
 
 **Type:** Bug
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** [#1](https://github.com/zhanggit3/Event-Management/issues/1) _(local PRD sequence: 010)_
 
 ## Problem
