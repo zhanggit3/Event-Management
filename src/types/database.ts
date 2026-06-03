@@ -357,6 +357,80 @@ export interface CalendarEvent {
   };
 }
 
+// ── Component templates (ISSUE-012) ──────────────────────────────────────
+// A template captures the structure of a component: activities → tasks → subtasks.
+export type TemplateSubtask = {
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+};
+export type TemplateTaskNode = {
+  title: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  subtasks: TemplateSubtask[];
+};
+export type TemplateActivity = {
+  name: string;
+  description?: string;
+  priority?: "low" | "medium" | "high" | "critical" | null;
+  tasks: TemplateTaskNode[];
+};
+
+export interface ComponentTemplate {
+  id: string;
+  organization_id: string | null;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string | null;
+  description: string | null;
+  // Flat top-level tasks — retained for the AddComponentDialog "Library" tab (backward compat).
+  tasks_json: { title: string; description?: string; priority?: string }[];
+  // Full nested structure (ISSUE-012).
+  structure_json: TemplateActivity[];
+  source_event_name: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// ── Clients (ISSUE-011) — org-level Collaborators directory ───────────────
+export interface Client {
+  id: string;
+  organization_id: string;
+  client_name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  projects: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// ── My Items library (ISSUE-013) ──────────────────────────────────────────
+export interface LibraryFolder {
+  id: string;
+  organization_id: string;
+  name: string;
+  parent_folder_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LibraryFile {
+  id: string;
+  organization_id: string;
+  folder_id: string | null;
+  name: string;
+  storage_key: string;
+  file_size: number | null;
+  mime_type: string | null;
+  source_type: "upload" | "task_attachment" | "estimate_snapshot";
+  source_ref: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type ResourceCategory =
   | "document"
   | "spreadsheet"

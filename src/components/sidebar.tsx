@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Zap, ChevronDown, Menu, X } from "lucide-react";
+import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, Zap, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notification-bell";
@@ -61,6 +61,17 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
     });
   }
 
+  // The rail is a top-level switcher; the panel below shows the active section's context.
+  // "dashboard" must be an EXACT match for "/" — otherwise fallthrough routes like
+  // /settings would light up the Dashboard icon and render the Overview panel.
+  const activeSection: "dashboard" | "events" | "company" | "other" = pathname.startsWith("/company")
+    ? "company"
+    : pathname.startsWith("/events")
+      ? "events"
+      : pathname === "/"
+        ? "dashboard"
+        : "other";
+
   return (
     <>
       {/* ── Mobile top bar — hidden on md+ ───────────────────────────────── */}
@@ -108,14 +119,14 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
           </IconTooltip>
         </div>
 
-        {/* Primary nav icons */}
+        {/* Primary nav icons — top-level section switcher */}
         <nav className="flex-1 flex flex-col items-center py-3 gap-1">
           <IconTooltip label="Dashboard">
             <Link
               href="/"
               className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                pathname === "/"
+                activeSection === "dashboard"
                   ? "bg-indigo-500/15 text-indigo-400"
                   : "text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
               )}
@@ -124,13 +135,41 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
             </Link>
           </IconTooltip>
 
-          <IconTooltip label="Notifications">
-            <NotificationBell />
+          <IconTooltip label="Events">
+            <Link
+              href="/events"
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                activeSection === "events"
+                  ? "bg-indigo-500/15 text-indigo-400"
+                  : "text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
+              )}
+            >
+              <CalendarDays className="w-4 h-4" />
+            </Link>
+          </IconTooltip>
+
+          <IconTooltip label="Company">
+            <Link
+              href="/company"
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                activeSection === "company"
+                  ? "bg-indigo-500/15 text-indigo-400"
+                  : "text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
+              )}
+            >
+              <Building2 className="w-4 h-4" />
+            </Link>
           </IconTooltip>
         </nav>
 
         {/* Footer icons */}
         <div className="flex flex-col items-center pb-3 pt-3 gap-1 border-t border-white/[0.06]">
+          <IconTooltip label="Notifications">
+            <NotificationBell />
+          </IconTooltip>
+
           <IconTooltip label="Settings">
             <Link
               href="/settings"
@@ -164,7 +203,7 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
         </div>
       </div>
 
-      {/* ── Content Panel ─────────────────────────────────────────────────── */}
+      {/* ── Content Panel — contextual to the active section ──────────────── */}
       <div className="flex flex-col w-48 min-h-screen">
 
         {/* Workspace header */}
@@ -185,120 +224,219 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
-
-          {/* ── My Space ─────────────────────────────────────── */}
-          <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
-            My Space
-          </p>
-          {workspaceEvents.length > 0 ? (
-            <div className="space-y-0.5">
-              {workspaceEvents.map((event) => (
-                <EventItem
-                  key={event.id}
-                  href={`/events/${event.slug}`}
-                  label={event.name}
-                  active={pathname === `/events/${event.slug}` || pathname.startsWith(`/events/${event.slug}/`)}
-                  status={event.status}
-                />
-              ))}
-              <Link
-                href="/events/new"
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
-              >
-                <Plus className="w-3 h-3 shrink-0" />
-                <span>New Event</span>
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              <Link
-                href="/events/new"
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
-              >
-                <Plus className="w-3 h-3 shrink-0" />
-                <span>New Event</span>
-              </Link>
-            </div>
+          {activeSection === "events" && (
+            <EventsPanel
+              workspaceEvents={workspaceEvents}
+              organizations={organizations}
+              allEvents={allEvents}
+              activeOrgId={activeOrgId}
+              pathname={pathname}
+              collapsed={collapsed}
+              toggleOrg={toggleOrg}
+            />
           )}
 
-          {/* ── Shared with me ───────────────────────────────── */}
-          {organizations.length > 0 && (
+          {activeSection === "company" && <CompanyPanel pathname={pathname} />}
+
+          {activeSection === "dashboard" && (
             <>
-              <div className="pt-3 pb-1 px-2">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
-                  Shared with me
-                </p>
-              </div>
-              <div className="space-y-1">
-                {organizations.map((org) => {
-                  const orgEvents = allEvents.filter((e) => e.organization_id === org.id);
-                  const isGuest = org.membershipScope !== "org";
-                  const isCollapsed = collapsed.has(org.id);
-                  const isNewlyJoined = activeOrgId === org.id;
-
-                  return (
-                    <div key={org.id} className={cn(isNewlyJoined && "ring-1 ring-indigo-500/30 rounded-lg")}>
-                      <button
-                        onClick={() => toggleOrg(org.id)}
-                        className={cn(
-                          "flex items-center gap-1.5 w-full px-2 py-1 rounded-lg transition-colors",
-                          isNewlyJoined
-                            ? "text-white/80 bg-indigo-500/10 hover:bg-indigo-500/15"
-                            : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
-                        )}
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "w-3 h-3 shrink-0 transition-transform",
-                            isNewlyJoined ? "text-indigo-400/60" : "text-white/30",
-                            isCollapsed && "-rotate-90"
-                          )}
-                        />
-                        <span className="flex-1 text-left text-xs font-medium truncate">
-                          {org.name}
-                        </span>
-                        {isNewlyJoined && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                        )}
-                        {isGuest && !isNewlyJoined && (
-                          <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/[0.06] text-white/30 shrink-0">
-                            Guest
-                          </span>
-                        )}
-                      </button>
-
-                      {!isCollapsed && (
-                        <div className="mt-0.5 space-y-0.5">
-                          {orgEvents.map((event) => (
-                            <EventItem
-                              key={event.id}
-                              href={`/events/${event.slug}`}
-                              label={event.name}
-                              active={pathname === `/events/${event.slug}` || pathname.startsWith(`/events/${event.slug}/`)}
-                              status={event.status}
-                            />
-                          ))}
-                          {!isGuest && (
-                            <Link
-                              href="/events/new"
-                              className="flex items-center gap-2 px-2 py-1.5 pl-5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
-                            >
-                              <Plus className="w-3 h-3 shrink-0" />
-                              <span>New Event</span>
-                            </Link>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
+                Workspace
+              </p>
+              <Link
+                href="/"
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs bg-indigo-500/15 text-indigo-300 transition-colors"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+                <span className="flex-1 truncate font-medium">Overview</span>
+              </Link>
             </>
           )}
         </nav>
       </div>
     </aside>
     </>
+  );
+}
+
+function EventsPanel({
+  workspaceEvents,
+  organizations,
+  allEvents,
+  activeOrgId,
+  pathname,
+  collapsed,
+  toggleOrg,
+}: {
+  workspaceEvents: SidebarProps["workspaceEvents"];
+  organizations: SidebarProps["organizations"];
+  allEvents: SidebarProps["allEvents"];
+  activeOrgId?: string | null;
+  pathname: string;
+  collapsed: Set<string>;
+  toggleOrg: (orgId: string) => void;
+}) {
+  return (
+    <>
+      {/* ── My Space ─────────────────────────────────────── */}
+      <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
+        My Space
+      </p>
+      {workspaceEvents.length > 0 ? (
+        <div className="space-y-0.5">
+          {workspaceEvents.map((event) => (
+            <EventItem
+              key={event.id}
+              href={`/events/${event.slug}`}
+              label={event.name}
+              active={pathname === `/events/${event.slug}` || pathname.startsWith(`/events/${event.slug}/`)}
+              status={event.status}
+            />
+          ))}
+          <Link
+            href="/events/new"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
+          >
+            <Plus className="w-3 h-3 shrink-0" />
+            <span>New Event</span>
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          <Link
+            href="/events/new"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
+          >
+            <Plus className="w-3 h-3 shrink-0" />
+            <span>New Event</span>
+          </Link>
+        </div>
+      )}
+
+      {/* ── Shared with me ───────────────────────────────── */}
+      {organizations.length > 0 && (
+        <>
+          <div className="pt-3 pb-1 px-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
+              Shared with me
+            </p>
+          </div>
+          <div className="space-y-1">
+            {organizations.map((org) => {
+              const orgEvents = allEvents.filter((e) => e.organization_id === org.id);
+              const isGuest = org.membershipScope !== "org";
+              const isCollapsed = collapsed.has(org.id);
+              const isNewlyJoined = activeOrgId === org.id;
+
+              return (
+                <div key={org.id} className={cn(isNewlyJoined && "ring-1 ring-indigo-500/30 rounded-lg")}>
+                  <button
+                    onClick={() => toggleOrg(org.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 w-full px-2 py-1 rounded-lg transition-colors",
+                      isNewlyJoined
+                        ? "text-white/80 bg-indigo-500/10 hover:bg-indigo-500/15"
+                        : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+                    )}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "w-3 h-3 shrink-0 transition-transform",
+                        isNewlyJoined ? "text-indigo-400/60" : "text-white/30",
+                        isCollapsed && "-rotate-90"
+                      )}
+                    />
+                    <span className="flex-1 text-left text-xs font-medium truncate">
+                      {org.name}
+                    </span>
+                    {isNewlyJoined && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                    )}
+                    {isGuest && !isNewlyJoined && (
+                      <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-white/[0.06] text-white/30 shrink-0">
+                        Guest
+                      </span>
+                    )}
+                  </button>
+
+                  {!isCollapsed && (
+                    <div className="mt-0.5 space-y-0.5">
+                      {orgEvents.map((event) => (
+                        <EventItem
+                          key={event.id}
+                          href={`/events/${event.slug}`}
+                          label={event.name}
+                          active={pathname === `/events/${event.slug}` || pathname.startsWith(`/events/${event.slug}/`)}
+                          status={event.status}
+                        />
+                      ))}
+                      {!isGuest && (
+                        <Link
+                          href="/events/new"
+                          className="flex items-center gap-2 px-2 py-1.5 pl-5 rounded-lg text-xs text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-colors"
+                        >
+                          <Plus className="w-3 h-3 shrink-0" />
+                          <span>New Event</span>
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function CompanyPanel({ pathname }: { pathname: string }) {
+  return (
+    <>
+      {/* ── Collaborators ────────────────────────────────── */}
+      <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
+        Collaborators
+      </p>
+      <div className="space-y-0.5">
+        <CompanyNavItem href="/company" label="Clients" active={pathname === "/company"} />
+      </div>
+
+      {/* ── Library ──────────────────────────────────────── */}
+      <div className="pt-3 pb-1 px-2">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-white/25">
+          Library
+        </p>
+      </div>
+      <div className="space-y-0.5">
+        <CompanyNavItem
+          href="/company/templates"
+          label="Templates"
+          active={pathname === "/company/templates" || pathname.startsWith("/company/templates/")}
+        />
+        <CompanyNavItem
+          href="/company/my-items"
+          label="My Items"
+          active={pathname === "/company/my-items" || pathname.startsWith("/company/my-items/")}
+        />
+      </div>
+    </>
+  );
+}
+
+function CompanyNavItem({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-2 px-2 py-1.5 pl-5 rounded-lg text-xs transition-colors font-medium",
+        active
+          ? "bg-indigo-500/15 text-indigo-300"
+          : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+      )}
+    >
+      <span className="flex-1 truncate">{label}</span>
+    </Link>
   );
 }
 

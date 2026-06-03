@@ -300,6 +300,7 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
                   componentSlug={componentSlug}
                   organizationId={event.organization_id}
                   eventSlug={eventSlug}
+                  eventName={event.name}
                 />
               </div>
             )}

@@ -73,7 +73,7 @@ export default async function EventDashboardPage({ params }: PageProps) {
         .single(),
       supabase
         .from("component_templates")
-        .select("id, name, slug, icon, color, description")
+        .select("id, name, slug, icon, color, description, tasks_json, structure_json")
         .eq("organization_id", dbEvent.organization_id)
         .order("name"),
       supabase

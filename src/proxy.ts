@@ -18,6 +18,7 @@ const PROTECTED_PREFIXES = [
   "/settings",
   "/events",
   "/onboarding",
+  "/company",
 ];
 
 // Exact protected paths (dashboard home)
