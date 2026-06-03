@@ -156,7 +156,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         userInitials={getInitials(displayName)}
         userEmail={userEmail}
       />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto min-w-0 pt-14 md:pt-0">
         {children}
       </main>
     </div>

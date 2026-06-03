@@ -189,7 +189,7 @@ export default async function DashboardPage() {
 
         {/* Stats row */}
         {totalEvents > 0 && (
-          <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {[
               { label: "Total events", value: totalEvents, sub: "all time" },
               { label: "Active",       value: activeCount, sub: "in progress" },
