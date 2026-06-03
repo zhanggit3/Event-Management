@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Zap, ChevronDown } from "lucide-react";
+import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Zap, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notification-bell";
@@ -40,6 +40,17 @@ interface SidebarProps {
 export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, activeOrgId, userInitials, userEmail }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes (e.g. tapping a nav link).
+  // Uses React's "adjust state during render from a previous value" pattern
+  // (storing the prior pathname in state) instead of a setState-in-effect,
+  // which the project's lint config disallows.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    if (mobileOpen) setMobileOpen(false);
+  }
 
   function toggleOrg(orgId: string) {
     setCollapsed((prev) => {
@@ -51,7 +62,39 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
   }
 
   return (
-    <aside className="flex min-h-screen shrink-0 bg-[#080814] text-white border-r border-white/[0.06]">
+    <>
+      {/* ── Mobile top bar — hidden on md+ ───────────────────────────────── */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 h-14 px-3 bg-[#080814] border-b border-white/[0.06]">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="flex items-center justify-center w-9 h-9 rounded-lg text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
+          <Zap className="w-4 h-4 text-white" />
+        </div>
+      </div>
+
+      {/* ── Backdrop — only when open, only < md ─────────────────────────── */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+        />
+      )}
+
+      <aside
+        className={cn(
+          "flex bg-[#080814] text-white border-r border-white/[0.06]",
+          // mobile: fixed off-canvas drawer
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          // md+: restore original static behavior
+          "md:static md:translate-x-0 md:min-h-screen md:shrink-0 md:z-auto"
+        )}
+      >
 
       {/* ── Icon Rail ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col w-12 min-h-screen border-r border-white/[0.06] shrink-0">
@@ -125,13 +168,20 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
       <div className="flex flex-col w-48 min-h-screen">
 
         {/* Workspace header */}
-        <div className="flex flex-col justify-center px-3 h-14 border-b border-white/[0.06] shrink-0">
-          <p className="text-sm font-semibold text-white truncate leading-tight">
+        <div className="relative flex flex-col justify-center px-3 h-14 border-b border-white/[0.06] shrink-0">
+          <p className="text-sm font-semibold text-white truncate leading-tight pr-8 md:pr-0">
             {firstName ? `${firstName}’s Workspace` : "Your Workspace"}
           </p>
-          <p className="text-[10px] text-white/40 truncate leading-tight mt-0.5 font-mono uppercase tracking-wider">
+          <p className="text-[10px] text-white/40 truncate leading-tight mt-0.5 font-mono uppercase tracking-wider pr-8 md:pr-0">
             Personal
           </p>
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="md:hidden absolute top-3 right-2 flex items-center justify-center w-7 h-7 rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06]"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
@@ -248,6 +298,7 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
         </nav>
       </div>
     </aside>
+    </>
   );
 }
 
