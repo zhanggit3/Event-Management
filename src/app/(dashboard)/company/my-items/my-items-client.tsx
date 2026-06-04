@@ -9,7 +9,7 @@ import {
 import type { LibraryFolder, LibraryFile } from "@/types/database";
 import {
   createLibraryFolder, renameLibraryFolder, deleteLibraryFolder,
-  libraryUploadKey, recordLibraryFile, moveLibraryFile, deleteLibraryFile, getLibrarySignedUrl,
+  recordLibraryFile, moveLibraryFile, deleteLibraryFile, getLibrarySignedUrl,
 } from "@/app/actions/library";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatDate, cn } from "@/lib/utils";
 import { MAX_LIBRARY_FILE_BYTES, MAX_LIBRARY_FILE_LABEL } from "@/lib/limits";
+import { libraryStorageKey } from "@/lib/library-keys";
 import { FromTasksPanel } from "./from-tasks-panel";
 
 function formatBytes(n: number | null): string {
@@ -116,8 +117,9 @@ export function MyItemsClient({
         continue;
       }
       // Upload the file DIRECTLY to Storage (bypasses the 1 MB Server Action body limit),
-      // then record just the metadata via a server action.
-      const key = await libraryUploadKey(organizationId, currentFolderId, file.name);
+      // then record just the metadata via a server action. The key is built locally —
+      // recordLibraryFile re-validates that its first segment is this org.
+      const key = libraryStorageKey(organizationId, currentFolderId, file.name);
       const { error: upErr } = await supabase.storage
         .from("library-files").upload(key, file, { contentType: file.type || undefined });
       if (upErr) { setError(upErr.message); continue; }

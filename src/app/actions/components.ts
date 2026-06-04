@@ -219,7 +219,7 @@ export async function createComponentFromTemplate(formData: FormData) {
     }
     if (tasks.length > 0) {
       // tasks.activity_id is NOT NULL — flat tasks need a home activity, so create one.
-      const { data: defaultActivity } = await supabase
+      const { data: defaultActivity, error: activityError } = await supabase
         .from("activities")
         .insert({
           component_id: component.id,
@@ -231,18 +231,26 @@ export async function createComponentFromTemplate(formData: FormData) {
         })
         .select("id")
         .single();
-      if (defaultActivity) {
-        await supabase.from("tasks").insert(
-          tasks.map((t) => ({
-            component_id: component.id,
-            activity_id: defaultActivity.id,
-            title: t.title,
-            description: t.description || null,
-            priority: coerceTaskPriority(t.priority),
-            status: "todo",
-            created_by: user.id,
-          }))
-        );
+      if (!defaultActivity) {
+        // The home activity couldn't be created — surface it rather than silently
+        // returning a task-less component the user expected to be populated.
+        console.error("createComponentFromTemplate: default activity insert failed", activityError);
+        return { error: activityError?.message ?? "Component created, but its tasks could not be added." };
+      }
+      const { error: tasksError } = await supabase.from("tasks").insert(
+        tasks.map((t) => ({
+          component_id: component.id,
+          activity_id: defaultActivity.id,
+          title: t.title,
+          description: t.description || null,
+          priority: coerceTaskPriority(t.priority),
+          status: "todo",
+          created_by: user.id,
+        }))
+      );
+      if (tasksError) {
+        console.error("createComponentFromTemplate: legacy task insert failed", tasksError);
+        return { error: tasksError.message };
       }
     }
   }

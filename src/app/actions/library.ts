@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { LibraryFile, LibraryFolder } from "@/types/database";
 import { MAX_LIBRARY_FILE_BYTES, MAX_LIBRARY_FILE_LABEL } from "@/lib/limits";
+import { libraryStorageKey } from "@/lib/library-keys";
 
 const BUCKET = "library-files";
 
@@ -19,8 +20,19 @@ async function isMember(supabase: SupabaseServer, orgId: string, userId: string)
   return !!data;
 }
 
-function storageKey(orgId: string, folderId: string | null, fileName: string): string {
-  return `${orgId}/${folderId ?? "root"}/${Date.now()}_${fileName}`;
+/**
+ * A target folder (if any) must belong to the given org — a multi-org user must not be
+ * able to file something into a folder that lives in a different org they also belong to.
+ */
+async function targetFolderInOrg(
+  supabase: SupabaseServer,
+  targetFolderId: string | null,
+  orgId: string,
+): Promise<boolean> {
+  if (!targetFolderId) return true;
+  const { data } = await supabase
+    .from("library_folders").select("organization_id").eq("id", targetFolderId).single();
+  return !!data && data.organization_id === orgId;
 }
 
 // ── Folders ───────────────────────────────────────────────────────────────
@@ -134,17 +146,11 @@ export async function deleteLibraryFolder(folderId: string) {
 // ── Files ─────────────────────────────────────────────────────────────────
 
 /**
- * Build the canonical storage key for a library upload. Exposed so the client can
- * upload the file DIRECTLY to Storage (avoiding the 1 MB Server Action body limit),
- * then call `recordLibraryFile` with just the metadata.
- */
-export async function libraryUploadKey(organizationId: string, folderId: string | null, fileName: string) {
-  return storageKey(organizationId, folderId, fileName);
-}
-
-/**
  * Record a library file row AFTER the client has uploaded the object directly to the
  * `library-files` bucket. Only metadata crosses the Server Action boundary (tiny body).
+ *
+ * The client uploads to Storage FIRST, so every rejection path below must remove the
+ * now-orphaned object — otherwise a rejected record leaves a dangling file in the bucket.
  */
 export async function recordLibraryFile(
   organizationId: string,
@@ -155,23 +161,22 @@ export async function recordLibraryFile(
   mimeType: string | null,
 ) {
   const supabase = await createClient();
+  // Drop the already-uploaded object, then return the error.
+  const reject = async (message: string) => {
+    await supabase.storage.from(BUCKET).remove([storageKeyValue]);
+    return { error: message };
+  };
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
-  if (!(await isMember(supabase, organizationId, user.id))) return { error: "Not authorized" };
+  if (!(await isMember(supabase, organizationId, user.id))) return reject("Not authorized");
   if (fileSize !== null && fileSize > MAX_LIBRARY_FILE_BYTES) {
-    return { error: `"${name}" is too large. The maximum upload size is ${MAX_LIBRARY_FILE_LABEL}.` };
+    return reject(`"${name}" is too large. The maximum upload size is ${MAX_LIBRARY_FILE_LABEL}.`);
   }
   // The object key must live under this org (first path segment) — matches storage RLS.
-  if (storageKeyValue.split("/")[0] !== organizationId) return { error: "Invalid storage key" };
+  if (storageKeyValue.split("/")[0] !== organizationId) return reject("Invalid storage key");
   // A target folder (if any) must belong to this org.
-  if (folderId) {
-    const { data: folder } = await supabase
-      .from("library_folders").select("organization_id").eq("id", folderId).single();
-    if (!folder || folder.organization_id !== organizationId) {
-      await supabase.storage.from(BUCKET).remove([storageKeyValue]);
-      return { error: "Invalid target folder" };
-    }
-  }
+  if (!(await targetFolderInOrg(supabase, folderId, organizationId))) return reject("Invalid target folder");
 
   const { data, error } = await supabase
     .from("library_files")
@@ -188,10 +193,7 @@ export async function recordLibraryFile(
     .select()
     .single();
 
-  if (error) {
-    await supabase.storage.from(BUCKET).remove([storageKeyValue]);
-    return { error: error.message };
-  }
+  if (error) return reject(error.message);
 
   revalidatePath("/company/my-items");
   return { data: data as LibraryFile };
@@ -207,12 +209,8 @@ export async function moveLibraryFile(fileId: string, targetFolderId: string | n
   if (!file) return { error: "File not found" };
   if (!(await isMember(supabase, file.organization_id, user.id))) return { error: "Not authorized" };
 
-  // The target folder (if any) must belong to the SAME org — a multi-org user must not
-  // be able to move a file into a folder in a different org they also belong to.
-  if (targetFolderId) {
-    const { data: folder } = await supabase
-      .from("library_folders").select("organization_id").eq("id", targetFolderId).single();
-    if (!folder || folder.organization_id !== file.organization_id) return { error: "Invalid target folder" };
+  if (!(await targetFolderInOrg(supabase, targetFolderId, file.organization_id))) {
+    return { error: "Invalid target folder" };
   }
 
   const { data, error } = await supabase
@@ -329,17 +327,29 @@ export async function saveTaskAttachmentToLibrary(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
   if (!(await isMember(supabase, organizationId, user.id))) return { error: "Not authorized" };
+  if (!(await targetFolderInOrg(supabase, targetFolderId, organizationId))) {
+    return { error: "Invalid target folder" };
+  }
 
-  // Re-verify the attachment belongs to a task within THIS org.
-  const orgAttachments = await getOrgTaskAttachments(organizationId);
-  const att = orgAttachments.find((a) => a.id === attachmentId);
-  if (!att) return { error: "Attachment not found in this organization" };
+  // Re-verify the attachment belongs to a task within THIS org by walking just this
+  // one attachment's chain (attachment → task → component → event), not the whole org.
+  const { data: att } = await supabase
+    .from("task_attachments").select("file_name, storage_key, file_size, mime_type, task_id").eq("id", attachmentId).single();
+  if (!att) return { error: "Attachment not found" };
+  const { data: task } = await supabase.from("tasks").select("component_id").eq("id", att.task_id).single();
+  const { data: comp } = task
+    ? await supabase.from("components").select("event_id").eq("id", task.component_id).single()
+    : { data: null };
+  const { data: ev } = comp
+    ? await supabase.from("events").select("organization_id").eq("id", comp.event_id).single()
+    : { data: null };
+  if (!ev || ev.organization_id !== organizationId) return { error: "Attachment not found in this organization" };
 
   // Cross-bucket copy: download from task-attachments → upload to library-files.
   const { data: blob, error: dlError } = await supabase.storage.from("task-attachments").download(att.storage_key);
   if (dlError || !blob) return { error: dlError?.message ?? "Could not read the source file" };
 
-  const key = storageKey(organizationId, targetFolderId, att.file_name);
+  const key = libraryStorageKey(organizationId, targetFolderId, att.file_name);
   const { error: upError } = await supabase.storage
     .from(BUCKET).upload(key, blob, { contentType: att.mime_type ?? undefined });
   if (upError) return { error: upError.message };
@@ -425,6 +435,9 @@ export async function saveApprovedEstimateToLibrary(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
   if (!(await isMember(supabase, organizationId, user.id))) return { error: "Not authorized" };
+  if (!(await targetFolderInOrg(supabase, targetFolderId, organizationId))) {
+    return { error: "Invalid target folder" };
+  }
 
   const { data: estimate } = await supabase
     .from("estimates").select("id, proposal_number, status, component_id").eq("id", estimateId).single();
@@ -457,7 +470,7 @@ export async function saveApprovedEstimateToLibrary(
   const fileName = `${estimate.proposal_number}.csv`;
   const blob = new Blob([csv], { type: "text/csv" });
 
-  const key = storageKey(organizationId, targetFolderId, fileName);
+  const key = libraryStorageKey(organizationId, targetFolderId, fileName);
   const { error: upError } = await supabase.storage.from(BUCKET).upload(key, blob, { contentType: "text/csv" });
   if (upError) return { error: upError.message };
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ArrowRight, CalendarDays } from "lucide-react";
 import { NoOrgPrompt } from "@/components/no-org-prompt";
-import { EventCard } from "@/components/event-card";
+import { EventCard, EmptyEventsState } from "@/components/event-card";
 import { getDashboardData } from "@/lib/queries/dashboard-events";
 
 export default async function DashboardPage() {
@@ -95,15 +95,14 @@ export default async function DashboardPage() {
                 <EventCard key={event.id} event={event} />
               ))}
             </div>
-          ) : (
+          ) : totalEvents > 0 ? (
+            // Events exist, just none with an upcoming date — point back to the full list.
             <div className="flex flex-col items-center justify-center py-16 text-center bg-white/[0.02] border border-white/[0.06] rounded-xl">
               <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
                 <CalendarDays className="w-5 h-5 text-blue-400" />
               </div>
               <p className="text-sm text-white/50 mb-4 max-w-xs">
-                {totalEvents > 0
-                  ? "No upcoming events with a scheduled date."
-                  : "No events yet. Create your first event to get started."}
+                No upcoming events with a scheduled date.
               </p>
               <Link
                 href="/events"
@@ -113,6 +112,9 @@ export default async function DashboardPage() {
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
+          ) : (
+            // No events at all — guest-aware (guests can't create, so don't push them to).
+            <EmptyEventsState isGuest={!allOrgInfos.some((m) => m.role !== "guest")} />
           )}
         </div>
       </div>
