@@ -11,6 +11,7 @@ interface Props {
   componentSlug: string;
   organizationId: string;
   eventSlug: string;
+  eventName: string;
 }
 
 export function SaveAsTemplateButton({
@@ -20,15 +21,18 @@ export function SaveAsTemplateButton({
   componentSlug,
   organizationId,
   eventSlug,
+  eventName,
 }: Props) {
+  // Default template name = "{component} — {event}" (editable).
+  const defaultName = `${componentName} — ${eventName}`;
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(componentName);
+  const [name, setName] = useState(defaultName);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleOpen() {
-    setName(componentName);
+    setName(defaultName);
     setError(null);
     setSuccess(false);
     setOpen(true);
@@ -62,23 +66,28 @@ export function SaveAsTemplateButton({
     <>
       <button
         onClick={handleOpen}
-        className="inline-flex items-center gap-1.5 h-9 px-3 border-2 border-black bg-white shadow-[2px_2px_0px_0px_#000000] font-mono text-xs uppercase tracking-widest hover:shadow-[1px_1px_0px_0px_#000000] hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+        className="inline-flex items-center gap-1.5 h-9 px-3 bg-white/[0.06] border border-white/10 rounded-xl font-semibold text-white/70 text-xs hover:bg-white/[0.1] hover:text-white transition-all"
       >
         <BookmarkPlus className="w-3.5 h-3.5" />
         Save as template
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-[#FFF8F0] border-2 border-black shadow-[8px_8px_0px_0px_#000000] w-full max-w-sm mx-4">
-            <div className="bg-black px-4 py-2.5 flex items-center justify-between">
-              <span className="font-mono text-xs uppercase tracking-widest text-white">Save as template</span>
-              <button onClick={() => setOpen(false)} className="text-white font-mono text-xs hover:text-[#00CC66] transition-colors">✕</button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-[#0d0d1a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/[0.06]">
+              <h2 className="text-sm font-semibold text-white">Save as template</h2>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div className="space-y-1">
-                <label className="block font-mono text-xs uppercase tracking-widest text-[#555555]">
-                  Template Name
+              <div>
+                <label className="text-xs font-semibold text-white/50 uppercase tracking-widest block mb-1.5">
+                  Template name
                 </label>
                 <input
                   type="text"
@@ -86,27 +95,29 @@ export function SaveAsTemplateButton({
                   onChange={(e) => setName(e.target.value)}
                   autoFocus
                   required
-                  className="flex h-11 w-full border-2 border-black rounded-none bg-white px-3 text-sm focus:outline-none focus:border-[#00CC66] focus:bg-[#E8FFF5] transition-colors"
+                  className="flex h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 focus:bg-white/[0.08] transition-all"
                 />
               </div>
-              <p className="font-mono text-xs text-[#555555] uppercase tracking-wide">
-                All current tasks in this component will be saved as the template's default tasks.
+              <p className="text-xs text-white/40">
+                Activities, tasks, and subtasks in this component will be saved to the template.
               </p>
               {error && (
-                <p className="font-mono text-xs text-[#FF0000] uppercase tracking-widest">{error}</p>
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
               )}
               <div className="flex gap-2 justify-end pt-1">
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="h-10 px-4 border-2 border-black bg-white font-mono text-xs uppercase tracking-widest hover:bg-[#F0F0F0] transition-colors"
+                  className="inline-flex items-center justify-center h-10 px-4 bg-white/[0.06] border border-white/10 rounded-xl font-semibold text-sm text-white/70 hover:bg-white/[0.1] hover:text-white transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || !name.trim() || success}
-                  className="h-10 px-4 border-2 border-black bg-[#00CC66] shadow-[4px_4px_0px_0px_#000000] font-bold uppercase tracking-wide text-black text-xs hover:shadow-[2px_2px_0px_0px_#000000] hover:translate-x-[2px] hover:translate-y-[2px] transition-all disabled:opacity-50 disabled:translate-x-0 disabled:translate-y-0 disabled:shadow-[4px_4px_0px_0px_#000000] flex items-center gap-1.5"
+                  className="inline-flex items-center justify-center gap-1.5 h-10 px-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {success ? (
                     <><Check className="w-3.5 h-3.5" /> Saved!</>

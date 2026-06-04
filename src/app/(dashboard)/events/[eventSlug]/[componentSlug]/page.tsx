@@ -291,7 +291,9 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
                 />
               </div>
             )}
-            {user && (
+            {/* Saving a template requires org admin (RLS on component_templates) — only
+                show the button to users who can actually use it. */}
+            {user && isAdmin && (
               <div className="[&>button]:bg-white/[0.06] [&>button]:border [&>button]:border-white/10 [&>button]:text-white/60 [&>button]:rounded-xl [&>button]:text-sm [&>button]:hover:bg-white/[0.09] [&>button]:transition-all">
                 <SaveAsTemplateButton
                   componentId={component.id}
@@ -300,6 +302,7 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
                   componentSlug={componentSlug}
                   organizationId={event.organization_id}
                   eventSlug={eventSlug}
+                  eventName={event.name}
                 />
               </div>
             )}

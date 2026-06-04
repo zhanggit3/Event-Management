@@ -19,6 +19,8 @@ export type ComponentTemplate = {
   color: string | null;
   description: string | null;
   tasks_json: { title: string; description?: string; priority?: string }[];
+  // Nested activities → tasks → subtasks (ISSUE-012). Optional for older templates.
+  structure_json?: unknown[];
 };
 
 export type EventWithComponents = {
@@ -93,6 +95,7 @@ export function AddComponentDialog({
       if (template) {
         formData.set("template_id", template.id);
         formData.set("tasks_json", JSON.stringify(template.tasks_json ?? []));
+        formData.set("structure_json", JSON.stringify(template.structure_json ?? []));
         result = await createComponentFromTemplate(formData) as { error?: string } | undefined;
       } else {
         result = await createComponent(formData) as { error?: string } | undefined;
