@@ -135,6 +135,22 @@ export interface Task {
   updated_at: string;
 }
 
+export type MyWorkRow = {
+  id: string;
+  title: string;
+  status: "todo" | "in_progress" | "done";
+  priority: "low" | "medium" | "high" | "urgent";
+  createdAt: string;
+  dueDate: string | null;
+  lastModified: string;
+  commentCount: number;
+  assignee: { full_name: string; email: string; avatar_url: string | null } | null;
+  reporter: { full_name: string; email: string; avatar_url: string | null } | null;
+  event: { name: string; slug: string } | null;
+  /** Deep link that opens this task/subtask's edit panel, or null if it can't be resolved. */
+  href: string | null;
+};
+
 export interface Activity {
   id: string;
   component_id: string;
