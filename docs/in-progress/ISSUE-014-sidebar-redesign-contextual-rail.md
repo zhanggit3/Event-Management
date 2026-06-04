@@ -260,3 +260,9 @@ All nine Acceptance Criteria are satisfied and every Critical/Medium evaluator f
 ### PR Feedback Summary
 
 **PR #3 review (`/fix-pr-feedback`):** 1 PR comment received — the Vercel deploy bot (noise). 0 actionable review comments, 0 inline code comments, no human/automated reviewer. All checks pass (both Vercel preview deployments `Ready`); PR is `MERGEABLE` / `CLEAN`. No code changes required.
+
+**Local `/code-review ultra` fixes (pushed to `issue/company-section`):**
+- **Guest empty-state regression:** the new Dashboard (`/`) overview unconditionally showed "Create your first event" in its no-events state, pushing guest-only users toward an action they can't perform — and disagreeing with `/events`, which still used the guest-aware `EmptyEventsState`. `/` now reuses `EmptyEventsState` (guest-aware, hides the create CTA) for the no-events case, while keeping the distinct "no upcoming dated events" hint when events exist.
+- **Dead code:** removed `company-placeholder.tsx` (no importers; all three Company sub-pages render real views).
+
+Verified: `tsc --noEmit` clean; changed files lint-clean.

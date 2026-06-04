@@ -356,3 +356,11 @@ No server-action or data-model changes — purely the My Files view. The From Ta
 - `my-items-client.tsx`: `handleUpload` now uploads via the browser Supabase client (`createClient` from `@/lib/supabase/client`) straight to `library-files`, then calls `recordLibraryFile`. The storage RLS policies (added in this issue) authorize the direct client upload; the bucket `file_size_limit` + client/server checks still cap at 50 MB. No 50 MB-through-the-Next-server buffering.
 
 **PR #3 review (`/fix-pr-feedback`):** 1 PR comment received — the Vercel deploy bot (noise). 0 actionable review comments, 0 inline code comments, no human/automated reviewer. All checks pass (both Vercel preview deployments `Ready`); PR is `MERGEABLE` / `CLEAN`. No code changes required.
+
+**Local `/code-review ultra` fixes (pushed to `issue/company-section`):**
+- **Cross-org folder corruption (integrity):** `saveTaskAttachmentToLibrary` and `saveApprovedEstimateToLibrary` now verify the target folder belongs to the org before filing (the same `targetFolderInOrg` check already used by `moveLibraryFile`/`recordLibraryFile`). A multi-org user can no longer drop an org-A file into an org-B folder.
+- **Orphaned storage objects:** `recordLibraryFile` now removes the already-uploaded object on *every* rejection path (not-authorized / oversized / invalid-key / bad-folder / DB-error) via a `reject()` helper. Previously only the bad-folder and DB-error paths cleaned up.
+- **O(org-size) validation → O(1):** `saveTaskAttachmentToLibrary` walked the entire org tree (`getOrgTaskAttachments`) just to find one attachment. It now validates that single attachment's chain (attachment → task → component → event → org) directly.
+- **Removed `libraryUploadKey` round-trip:** the storage key is a pure string the client already has all inputs for. Extracted to `src/lib/library-keys.ts` (`libraryStorageKey`) and built client-side; the server reuses the same helper. `recordLibraryFile` still re-validates the key's org prefix.
+
+Verified: `tsc --noEmit` clean; changed files lint-clean.

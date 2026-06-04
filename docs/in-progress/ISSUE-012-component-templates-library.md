@@ -352,3 +352,9 @@ All changes verified: `tsc --noEmit` clean, `next build` ✓, touched files lint
 ### PR Feedback Summary
 
 **PR #3 review (`/fix-pr-feedback`):** 1 PR comment received — the Vercel deploy bot (noise). 0 actionable review comments, 0 inline code comments, no human/automated reviewer. All checks pass (both Vercel preview deployments `Ready`); PR is `MERGEABLE` / `CLEAN`. No code changes required.
+
+**Local `/code-review ultra` fixes (pushed to `issue/company-section`):**
+- **Save-as-template visible to non-admins:** `saveComponentAsTemplate` requires org admin (RLS on `component_templates`), but the button rendered for any signed-in user, so members hit a hard error only after filling the dialog. The button is now gated on `isAdmin` at the render site.
+- **Silent task loss in legacy instantiation:** `createComponentFromTemplate`'s legacy flat-tasks fallback inserted tasks only `if (defaultActivity)` and never inspected the insert error — a failure produced a task-less component with no signal. It now surfaces the activity/task insert error instead of swallowing it.
+
+Verified: `tsc --noEmit` clean; changed files lint-clean.
