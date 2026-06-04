@@ -514,3 +514,21 @@ The `tasks.updated_at` migration is a standard additive migration applied throug
 **Verdict: READY FOR REVIEW.** Every acceptance criterion is met and independently verified; the only schema change (`updated_at`) is additive, applied, and committed; all evaluator Critical/Medium findings are resolved; typecheck and build are green. The implementation follows the codebase's established patterns (server-component fetch + client optimistic state + `revalidatePath`, separate profile fetch to avoid the 3-FK `tasks→profiles` ambiguity, batched `.in()` queries with empty-array guards — no N+1). It is complete and shippable pending manual QA.
 
 ### PR Feedback Summary
+
+PR #8 had **no human or automated inline review comments** (only the Vercel deploy bot). The substantive feedback was the `/code-review` (high effort) pass run on the branch, which surfaced 8 findings after one candidate (a hypothesized "marking-done never persists" stale-read in `handleToggle`) was **refuted** during verification — React eagerly evaluates the first functional `setState` updater synchronously, so `nextDone` reaches the action correctly.
+
+**Total findings: 8 — Applied: 4 · Flagged as by-design (skipped): 3 · Deferred (cosmetic): 0 (the 1 low item was also applied).**
+
+**Applied:**
+1. **Date-only timezone shift (`my-work-table.tsx` `formatMonthDay`)** — `due_date` ("YYYY-MM-DD") parsed as UTC midnight then formatted locally showed the previous day in negative-offset timezones. Now date-only strings are formatted with `timeZone: "UTC"`; full timestamps (`created_at`/`updated_at`) stay in local time.
+2. **Table-wide `isPending` (`my-work-table.tsx`)** — a single boolean disabled every checkbox during any in-flight toggle. Replaced with a per-row `pendingIds: Set<string>`, so only the toggling row's checkbox is disabled.
+3. **Resize listener / body-style leak on unmount (`my-work-table.tsx` `startResize`)** — window `mousemove`/`mouseup` listeners and `document.body` cursor/userSelect leaked if the component unmounted mid-drag. Added a `dragCleanupRef` + `useEffect` unmount cleanup that tears down any active drag.
+4. **Revert dropped `lastModified` (`my-work-table.tsx` `handleToggle`)** — a failed toggle restored `status` but left the optimistic "now" timestamp (re-sorting the row). Now both `status` and the prior `lastModified` are captured and restored on error.
+5. **(Low) Migration backfill** — `updated_at` had been seeded to the migration run time for all existing rows. Added migration `20260604000002_backfill_tasks_updated_at.sql` (disable trigger → `set updated_at = created_at` → re-enable trigger), applied to the live DB; all 22 rows now reflect real `created_at`.
+
+**Flagged as by-design (intentional decisions from the PRD — not changed):**
+- **Binary completion checkbox loses `in_progress`** — checking then unchecking an in-progress task lands on `todo`. The checkbox is a deliberate "mark done" affordance; preserving prior non-done status would expand scope. Left as-is.
+- **Comment/last-modified rollup double-counts a subtask that is also its own row** — documented rollup behavior (a row counts its task + direct subtasks); a user assigned to both parent and subtask sees both.
+- **Reporter falls back to `created_by` when `reporter_id` is null** — intentional per the PRD (legacy tasks predate `reporter_id`).
+
+**Verification after fixes:** `npx tsc --noEmit` exit 0, `npm run lint` exit 0 (touched file clean), `npm run build` compiled successfully with `/my-work` registered.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Circle, Check, MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
 import { cn, formatDate, getInitials } from "@/lib/utils";
@@ -87,7 +87,15 @@ function firstName(p: MyWorkRow["assignee"]): string {
 function formatMonthDay(date: string): string {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d);
+  // A date-only string ("YYYY-MM-DD", e.g. due_date) parses as UTC midnight; format
+  // it in UTC so it doesn't shift to the previous day in negative-offset timezones.
+  // Full timestamps (created_at, updated_at) are instants — format in local time.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(dateOnly ? { timeZone: "UTC" } : {}),
+  }).format(d);
 }
 
 // Returns the non-null ordering only (subject to the asc/desc sign flip).
@@ -112,7 +120,13 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
   const [sortBy, setSortBy] = useState<SortCol>("dueDate");
   const [sortAsc, setSortAsc] = useState(true);
   const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS);
-  const [isPending, setIsPending] = useState(false);
+  // Per-row in-flight toggles, so one pending toggle doesn't disable every checkbox.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
+
+  // Holds the teardown for an in-progress column drag so we can run it on unmount
+  // if the user navigates away while still holding the handle.
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
 
   const startResize = useCallback((e: React.MouseEvent, key: ColKey) => {
     e.preventDefault();
@@ -124,17 +138,20 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
       const next = Math.max(min, start.startWidth + (ev.clientX - start.startX));
       setWidths((w) => ({ ...w, [key]: next }));
     };
-    const up = () => {
+    const cleanup = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
+      dragCleanupRef.current = null;
     };
+    const up = () => cleanup();
 
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     document.body.style.userSelect = "none";
     document.body.style.cursor = "col-resize";
+    dragCleanupRef.current = cleanup;
   }, [widths]);
 
   function resetWidths() {
@@ -151,24 +168,34 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
   }
 
   function handleToggle(rowId: string) {
-    let prevStatus: MyWorkRow["status"] | undefined;
+    let prev: { status: MyWorkRow["status"]; lastModified: string } | undefined;
     let nextDone = false;
-    setData((prev) =>
-      prev.map((r) => {
+    setData((rows) =>
+      rows.map((r) => {
         if (r.id !== rowId) return r;
-        prevStatus = r.status;
+        prev = { status: r.status, lastModified: r.lastModified };
         nextDone = r.status !== "done";
         return { ...r, status: nextDone ? "done" : "todo", lastModified: new Date().toISOString() };
       }),
     );
-    setIsPending(true);
+    setPendingIds((ids) => new Set(ids).add(rowId));
     void (async () => {
       const result = await toggleTaskDone(rowId, nextDone);
-      if (result?.error && prevStatus !== undefined) {
-        const restore = prevStatus;
-        setData((prev) => prev.map((r) => (r.id === rowId ? { ...r, status: restore } : r)));
+      if (result?.error && prev !== undefined) {
+        // Restore both status and the prior timestamp so a failed toggle doesn't
+        // leave a bogus "now" Last Modified (which would also re-sort the row).
+        const restore = prev;
+        setData((rows) =>
+          rows.map((r) =>
+            r.id === rowId ? { ...r, status: restore.status, lastModified: restore.lastModified } : r,
+          ),
+        );
       }
-      setIsPending(false);
+      setPendingIds((ids) => {
+        const nextIds = new Set(ids);
+        nextIds.delete(rowId);
+        return nextIds;
+      });
     })();
   }
 
@@ -270,7 +297,7 @@ export function MyWorkTable({ rows }: { rows: MyWorkRow[] }) {
                     <td className="border-r border-white/[0.04] px-3 py-2.5 align-middle">
                       <button
                         onClick={() => handleToggle(row.id)}
-                        disabled={isPending}
+                        disabled={pendingIds.has(row.id)}
                         className="w-5 h-5 flex items-center justify-center hover:opacity-70 transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
                         title={done ? "Mark as to do" : "Mark as done"}
                       >
