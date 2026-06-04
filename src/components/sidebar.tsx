@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, Zap, ChevronDown, Menu, X } from "lucide-react";
+import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, Zap, ChevronDown, Menu, X, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notification-bell";
@@ -68,7 +68,7 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
     ? "company"
     : pathname.startsWith("/events")
       ? "events"
-      : pathname === "/"
+      : (pathname === "/" || pathname.startsWith("/my-work"))
         ? "dashboard"
         : "other";
 
@@ -245,10 +245,27 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
               </p>
               <Link
                 href="/"
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs bg-indigo-500/15 text-indigo-300 transition-colors"
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors font-medium",
+                  pathname === "/"
+                    ? "bg-indigo-500/15 text-indigo-300"
+                    : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]",
+                )}
               >
-                <LayoutDashboard className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
-                <span className="flex-1 truncate font-medium">Overview</span>
+                <LayoutDashboard className={cn("w-3.5 h-3.5 shrink-0", pathname === "/" ? "text-indigo-400" : "text-white/30")} />
+                <span className="flex-1 truncate">Overview</span>
+              </Link>
+              <Link
+                href="/my-work"
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors font-medium",
+                  pathname.startsWith("/my-work")
+                    ? "bg-indigo-500/15 text-indigo-300"
+                    : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]",
+                )}
+              >
+                <Briefcase className={cn("w-3.5 h-3.5 shrink-0", pathname.startsWith("/my-work") ? "text-indigo-400" : "text-white/30")} />
+                <span className="flex-1 truncate">My Work</span>
               </Link>
             </>
           )}
