@@ -218,6 +218,14 @@ export async function createComponentFromTemplate(formData: FormData) {
       // Malformed tasks JSON — skip task insertion, component was created successfully
     }
     if (tasks.length > 0) {
+      // The flat-tasks path is all-or-nothing: if the home activity or its tasks can't
+      // be created, roll back the component we already inserted so the user sees a clean
+      // failure (and a retry doesn't strand a duplicate, task-less component). Deleting
+      // the component cascades to any partial activity/tasks (same as deleteComponent).
+      const rollback = async (message: string) => {
+        await supabase.from("components").delete().eq("id", component.id);
+        return { error: message };
+      };
       // tasks.activity_id is NOT NULL — flat tasks need a home activity, so create one.
       const { data: defaultActivity, error: activityError } = await supabase
         .from("activities")
@@ -232,10 +240,8 @@ export async function createComponentFromTemplate(formData: FormData) {
         .select("id")
         .single();
       if (!defaultActivity) {
-        // The home activity couldn't be created — surface it rather than silently
-        // returning a task-less component the user expected to be populated.
         console.error("createComponentFromTemplate: default activity insert failed", activityError);
-        return { error: activityError?.message ?? "Component created, but its tasks could not be added." };
+        return rollback(activityError?.message ?? "Could not create the component's tasks.");
       }
       const { error: tasksError } = await supabase.from("tasks").insert(
         tasks.map((t) => ({
@@ -250,7 +256,7 @@ export async function createComponentFromTemplate(formData: FormData) {
       );
       if (tasksError) {
         console.error("createComponentFromTemplate: legacy task insert failed", tasksError);
-        return { error: tasksError.message };
+        return rollback(tasksError.message);
       }
     }
   }
