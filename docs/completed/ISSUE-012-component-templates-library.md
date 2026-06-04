@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #012
 
 > **Depends on [[ISSUE-014]]** for the sidebar Company panel (the Library › Templates nav link points at `/company/templates`, which 014 already renders as a placeholder). This issue replaces that placeholder with the real Templates manager.

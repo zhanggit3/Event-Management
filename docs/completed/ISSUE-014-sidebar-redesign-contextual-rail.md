@@ -2,7 +2,7 @@
 
 **Type:** Design
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #014
 
 > **Sequence first.** This is the shell that [[ISSUE-011]] (Company › Clients), [[ISSUE-012]] (Templates), and [[ISSUE-013]] (My Items) plug into. It also **supersedes the sidebar edit and in-page section nav** that 011 originally specced — those move here. Build 014 before 011.

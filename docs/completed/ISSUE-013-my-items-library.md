@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #013
 
 > **Depends on [[ISSUE-014]]** for the sidebar Company panel (the Library › My Items nav link points at `/company/my-items`, which 014 renders as a placeholder). This issue replaces that placeholder with the real My Items library.

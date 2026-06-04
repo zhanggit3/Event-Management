@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #011
 
 > **Umbrella note:** "Company" spans four issues. [[ISSUE-014]] (build FIRST) owns the **sidebar redesign**: the Company rail icon AND the contextual second-panel nav (Collaborators › Clients; Library › Templates, My Items). This issue (011) builds the **Clients** content at `/company`. [[ISSUE-012]] adds Templates; [[ISSUE-013]] adds My Items.
