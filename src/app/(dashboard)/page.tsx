@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-full">
-      <div className="p-8 max-w-5xl mx-auto">
+      <div className="px-8 py-8">
         {/* Header */}
         <div className="flex items-start justify-between mb-10">
           <div>

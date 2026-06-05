@@ -32,7 +32,7 @@ export default async function CompanyPage() {
 
   return (
     <div className="min-h-full">
-      <div className="px-8 py-8 max-w-5xl mx-auto">
+      <div className="px-8 py-8">
         <ClientsView
           organizationId={organization.id}
           isAdmin={isAdmin}

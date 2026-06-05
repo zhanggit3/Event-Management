@@ -149,6 +149,22 @@ export type MyWorkRow = {
   event: { name: string; slug: string } | null;
   /** Deep link that opens this task/subtask's edit panel, or null if it can't be resolved. */
   href: string | null;
+  /** Per-user custom column values for this task, keyed by my_work_columns.id. */
+  customCells: Record<string, string>;
+};
+
+/** A user-defined personal column on the My Work table (text-only, private). */
+export type MyWorkCustomColumn = { id: string; name: string };
+
+/**
+ * A user's personalized My Work column layout. `column_order` holds built-in keys
+ * (e.g. "title") and custom-column tokens ("col:<uuid>"); `hidden` lists built-in
+ * keys to hide; `widths` maps either kind of token to a pixel width.
+ */
+export type MyWorkViewConfig = {
+  column_order: string[];
+  hidden: string[];
+  widths: Record<string, number>;
 };
 
 export interface Activity {
