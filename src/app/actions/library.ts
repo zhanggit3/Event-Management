@@ -382,13 +382,17 @@ export async function saveTaskAttachmentToLibrary(
 
 export type ApprovedEstimate = { id: string; proposal_number: string; label: string };
 
-export async function getApprovedEstimates(organizationId: string): Promise<ApprovedEstimate[]> {
+// When `eventId` is provided the result is scoped to that single event (so an estimate from
+// one event never surfaces in another). When omitted, it stays org-wide for the company library.
+export async function getApprovedEstimates(organizationId: string, eventId?: string): Promise<ApprovedEstimate[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   if (!(await isMember(supabase, organizationId, user.id))) return [];
 
-  const { data: events } = await supabase.from("events").select("id, name").eq("organization_id", organizationId);
+  let eventsQuery = supabase.from("events").select("id, name").eq("organization_id", organizationId);
+  if (eventId) eventsQuery = eventsQuery.eq("id", eventId);
+  const { data: events } = await eventsQuery;
   const eventById = new Map((events ?? []).map((e) => [e.id, e.name as string]));
   if (eventById.size === 0) return [];
 

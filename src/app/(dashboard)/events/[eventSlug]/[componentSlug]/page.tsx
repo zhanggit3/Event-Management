@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, LayoutDashboard, FileText, Users, FolderOpen, CalendarDays, Link as LinkIcon, Lock } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, FileText, Users, FolderOpen, CalendarDays, Link as LinkIcon, Lock, Wallet } from "lucide-react";
 import { LockedComponentCard } from "@/components/locked-component-card";
 import { DashboardTab } from "@/components/dashboard-tab";
+import { BudgetTab } from "@/components/budget-tab";
+import { getOrCreateBudget } from "@/app/actions/budgets";
 import { ComponentTasksProvider } from "@/components/component-tasks-context";
 import { NoteSection } from "@/components/note-section";
 import { FilesTab } from "@/components/files-tab";
@@ -16,7 +18,7 @@ import { SaveAsTemplateButton } from "@/components/save-as-template-button";
 import { EditComponentDialog } from "@/components/edit-component-dialog";
 import { getCalendarEventsByComponent } from "@/lib/queries/calendar-events";
 import { getResourceLinksByComponent } from "@/lib/queries/resource-links";
-import type { Task, Profile, Note, ComponentMember, FolderWithFiles, CalendarEvent, ResourceLink, Activity } from "@/types/database";
+import type { Task, Profile, Note, ComponentMember, FolderWithFiles, CalendarEvent, ResourceLink, Activity, Budget, BudgetLineItem } from "@/types/database";
 
 interface PageProps {
   params: Promise<{ eventSlug: string; componentSlug: string }>;
@@ -43,6 +45,8 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
   let calendarEvents: CalendarEvent[] = [];
   let resourceLinks: ResourceLink[] = [];
   let activities: Activity[] = [];
+  let budget: Budget | null = null;
+  let budgetLineItems: BudgetLineItem[] = [];
   let isAdmin = false;
   let isLockedForUser = false;
   let lockedRequestId: string | null = null;
@@ -185,6 +189,15 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
         .eq("component_id", dbComponent.id)
         .order("sort_order", { ascending: true });
       activities = (activitiesRaw ?? []) as Activity[];
+
+      // Finance master budget (one per Finance component, created on first access).
+      if (dbComponent.slug === "finance") {
+        const b = await getOrCreateBudget(dbComponent.id);
+        if (b.data) {
+          budget = b.data.budget;
+          budgetLineItems = b.data.lineItems;
+        }
+      }
     }
   }
 
@@ -194,7 +207,7 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
   if (isLockedForUser) {
     return (
       <div className="min-h-screen bg-[#05050F] px-6 py-8">
-        <div className="max-w-6xl mx-auto">
+        <div>
           {/* Locked header */}
           <div className="flex items-center gap-3 mb-10">
             <Link href={`/events/${eventSlug}`}>
@@ -239,7 +252,7 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
 
   return (
     <div className="min-h-screen bg-[#05050F]">
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="px-6 py-8">
 
         {/* Page header */}
         <div className="flex items-start gap-4 mb-8 flex-wrap">
@@ -320,6 +333,15 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
                 <LayoutDashboard className="w-3.5 h-3.5" />
                 Dashboard
               </TabsTrigger>
+              {component.slug === "finance" && (
+                <TabsTrigger
+                  value="budget"
+                  className="flex items-center gap-1.5 rounded-lg text-white/40 hover:text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:shadow-sm transition-all text-sm px-3 py-1.5"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  Budget
+                </TabsTrigger>
+              )}
               <TabsTrigger
                 value="notes"
                 className="flex items-center gap-1.5 rounded-lg text-white/40 hover:text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:shadow-sm transition-all text-sm px-3 py-1.5"
@@ -371,6 +393,19 @@ export default async function ComponentPage({ params, searchParams }: PageProps)
                 )}
               </TabsTrigger>
             </TabsList>
+
+            {component.slug === "finance" && budget && (
+              <TabsContent value="budget" className="pb-8">
+                <BudgetTab
+                  budget={budget}
+                  initialLineItems={budgetLineItems}
+                  eventSlug={eventSlug}
+                  componentSlug={componentSlug}
+                  organizationId={event.organization_id}
+                  eventId={event.id}
+                />
+              </TabsContent>
+            )}
 
             {/* DASHBOARD TAB */}
             <TabsContent value="dashboard" className="pb-8">

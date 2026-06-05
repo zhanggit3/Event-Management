@@ -1,16 +1,30 @@
 "use client";
 import { useState, useRef } from "react";
-import { Plus, Trash2, X } from "lucide-react";
-import { cn, formatDate } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2, X, Save } from "lucide-react";
+import { cn, formatDate, formatNoteTimestamp } from "@/lib/utils";
 import type { Estimate, EstimateColumn, EstimateSection, EstimateLineItem } from "@/types/database";
 import {
   updateEstimateStatus,
+  updateEstimateName,
+  deleteEstimate,
   addEstimateRow,
   deleteEstimateRow,
   upsertEstimateCell,
   addEstimateColumn,
   deleteEstimateColumn,
 } from "@/app/actions/estimates";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // F-01: formatDate is imported directly from @/lib/utils — not passed as a prop
 
@@ -21,22 +35,40 @@ interface EstimateEditorProps {
   eventSlug: string;
   componentSlug: string;
   activityId: string;
-  eventDate: string | null;
-  eventAddress: string | null;
+  proposalName: string;
+  createdAt: string;
+  updatedAt: string;
+  modifiedByName: string | null;
 }
 
 export function EstimateEditor(props: EstimateEditorProps) {
-  const { estimate, eventSlug, componentSlug, activityId, eventDate, eventAddress } = props;
+  const { estimate, eventSlug, componentSlug, activityId, createdAt, updatedAt, modifiedByName } = props;
+  const router = useRouter();
 
   const [columns, setColumns] = useState(props.columns);
   const [sections, setSections] = useState(props.sections);
   const [status, setStatus] = useState(props.estimate.status);
+  const [proposalName, setProposalName] = useState(props.proposalName);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [addColOpen, setAddColOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
   const [newColType, setNewColType] = useState<EstimateColumn["col_type"]>("text");
 
   // F-03: per-cell debounce timers — keyed by `${lineItemId}:${columnId}`
   const debounceTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // In-flight cell-save promises (fired timers that are mid-network). Save() awaits these
+  // so it never persists the name / refreshes before a cell write has landed.
+  const inFlightSaves = useRef<Set<Promise<unknown>>>(new Set());
+
+  // Wrap a cell-save promise so it is tracked while in flight and auto-removed on settle.
+  function trackSave(p: Promise<unknown>) {
+    inFlightSaves.current.add(p);
+    p.finally(() => inFlightSaves.current.delete(p));
+    return p;
+  }
 
   // F-05: stores the cell value at focus time to skip no-change saves
   const focusValues = useRef<Map<string, string>>(new Map());
@@ -110,32 +142,122 @@ export function EstimateEditor(props: EstimateEditorProps) {
     const existing = debounceTimers.current.get(key);
     if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       debounceTimers.current.delete(key);
-      await upsertEstimateCell(lineItemId, columnId, value, eventSlug, componentSlug, activityId);
+      trackSave(upsertEstimateCell(lineItemId, columnId, value, estimate.id, eventSlug, componentSlug, activityId));
     }, 300);
 
     debounceTimers.current.set(key, timer);
+  }
+
+  // Save: flush any pending debounced cell edits, wait for ALL in-flight cell saves
+  // (including timers that already fired and are mid-network), then persist the proposal name.
+  async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    setActionError(null);
+
+    // 1. Flush pending (not-yet-fired) debounced cell edits using their current values.
+    const pending = Array.from(debounceTimers.current.entries());
+    debounceTimers.current.clear();
+    for (const [key, timer] of pending) {
+      clearTimeout(timer);
+      const [lineItemId, columnId] = key.split(":");
+      const section = sections.find(s => s.lineItems.some(li => li.id === lineItemId));
+      const value = section?.lineItems.find(li => li.id === lineItemId)?.cells[columnId] ?? "";
+      trackSave(upsertEstimateCell(lineItemId, columnId, value, estimate.id, eventSlug, componentSlug, activityId));
+    }
+
+    // 2. Wait for every in-flight cell save to land before persisting the name / refreshing.
+    await Promise.all([...inFlightSaves.current]);
+
+    // 3. Persist the proposal name, then refresh so Last Modified / Modified By update.
+    const result = await updateEstimateName(estimate.id, proposalName, eventSlug, componentSlug, activityId);
+    setSaving(false);
+    if (result.error) { setActionError(result.error); return; }
+    router.refresh();
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setActionError(null);
+    const result = await deleteEstimate(activityId, eventSlug, componentSlug);
+    if (result.error) {
+      setDeleting(false);
+      setActionError(result.error);
+      return;
+    }
+    router.push(`/events/${eventSlug}/${componentSlug}`);
   }
 
   return (
     <div className="space-y-6">
 
       {/* General Info */}
-      <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-6">
+      <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-6 space-y-5">
+        {/* Proposal name (editable) + Save / Delete */}
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Proposal name</p>
+            <input
+              value={proposalName}
+              onChange={(e) => setProposalName(e.target.value)}
+              placeholder="Untitled proposal"
+              className="w-full max-w-md bg-white/[0.06] border border-white/10 rounded-lg px-3 py-1.5 text-sm font-semibold text-white placeholder:text-white/25 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 transition-all"
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-indigo-500/20 text-indigo-300 text-xs font-semibold hover:bg-indigo-500/30 transition-all disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  disabled={deleting}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/[0.06] border border-white/10 text-white/60 text-xs font-semibold hover:bg-red-500/15 hover:text-red-400 hover:border-red-500/30 transition-all disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this estimate?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    The estimate and its generated activity will be permanently removed. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        {actionError && (
+          <p className="text-xs text-red-400">{actionError}</p>
+        )}
+
+        {/* Metadata: Created · Last Modified · Modified By · Status */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Proposal #</p>
-            <p className="text-sm font-mono font-semibold text-white">{estimate.proposal_number}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Created Date</p>
+            <p className="text-sm text-white/60">{createdAt ? formatDate(createdAt) : "—"}</p>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Date</p>
-            {/* F-01: formatDate imported directly, not from props */}
-            <p className="text-sm text-white/60">{eventDate ? formatDate(eventDate) : "—"}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Last Modified Date</p>
+            <p className="text-sm text-white/60">{updatedAt ? formatNoteTimestamp(updatedAt) : "—"}</p>
           </div>
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Location</p>
-            <p className="text-sm text-white/60 truncate">{eventAddress || "—"}</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Modified By</p>
+            <p className="text-sm text-white/60 truncate">{modifiedByName ?? "—"}</p>
           </div>
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wider text-white/30 mb-1.5">Status</p>

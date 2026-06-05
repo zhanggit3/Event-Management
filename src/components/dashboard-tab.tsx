@@ -85,13 +85,15 @@ function NewActivityModal({
   const [assigneeId, setAssigneeId] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [templateType, setTemplateType] = useState<"" | "estimate">("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function reset() {
     setName(""); setDescription(""); setColor(PRESET_COLORS[0]);
     setStatus("active"); setPriority(""); setStartDate(""); setDueDate("");
-    setOwnerId(""); setAssigneeId(""); setTags([]); setTagInput(""); setError(null);
+    setOwnerId(""); setAssigneeId(""); setTags([]); setTagInput("");
+    setTemplateType(""); setError(null);
   }
 
   function addTag() {
@@ -128,6 +130,7 @@ function NewActivityModal({
     if (ownerId) fd.set("owner_id", ownerId);
     if (assigneeId) fd.set("assignee_id", assigneeId);
     fd.set("tags", JSON.stringify(tags));
+    fd.set("template_type", templateType);
     fd.set("event_slug", eventSlug);
     fd.set("component_slug", componentSlug);
     startTransition(async () => {
@@ -228,6 +231,31 @@ function NewActivityModal({
                       />
                     </div>
                     <p className="mt-1 text-[10px] text-white/30">Press Enter or comma to add a tag</p>
+                  </div>
+
+                  {/* Template */}
+                  <div>
+                    <label className="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Template</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = templateType === "estimate" ? "" : "estimate";
+                        setTemplateType(next);
+                        if (next === "estimate" && !name.trim()) setName("Estimate");
+                      }}
+                      className={`w-full flex items-center justify-center gap-2 h-10 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                        templateType === "estimate"
+                          ? "border-indigo-500/60 bg-indigo-500/10 text-white"
+                          : "border-white/10 bg-white/[0.04] text-white/50 hover:text-white"
+                      }`}
+                    >
+                      <ReceiptText className="w-4 h-4" />Estimate
+                    </button>
+                    <p className="mt-1 text-[10px] text-white/30">
+                      {templateType === "estimate"
+                        ? "An estimate sheet will be generated under this activity."
+                        : "Leave off for a standard activity."}
+                    </p>
                   </div>
                 </div>
 
@@ -405,6 +433,14 @@ function ActivityRow({
             className="flex-1 text-sm font-semibold text-white bg-transparent border-0 border-b border-indigo-500/50 focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           />
+        ) : activity.template_type === "estimate" ? (
+          <Link
+            href={`/events/${eventSlug}/${componentSlug}/estimate/${activity.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-300 hover:text-indigo-200 hover:underline text-left"
+          >
+            <ReceiptText className="w-3.5 h-3.5 shrink-0" />{activity.name}
+          </Link>
         ) : (
           <button onClick={onToggle} className="flex-1 text-sm font-semibold text-white text-left">{activity.name}</button>
         )}
@@ -427,15 +463,6 @@ function ActivityRow({
               className="h-6 w-6 flex items-center justify-center rounded-lg text-white/30 hover:bg-red-500/10 hover:text-red-400 transition-all">
               <Trash2 className="w-3 h-3" />
             </button>
-          </IconTooltip>
-          <IconTooltip label="Estimate" side="top">
-            <Link
-              href={`/events/${eventSlug}/${componentSlug}/estimate/${activity.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="h-6 w-6 flex items-center justify-center rounded-lg text-white/30 hover:bg-white/[0.07] hover:text-white transition-all"
-            >
-              <ReceiptText className="w-3 h-3" />
-            </Link>
           </IconTooltip>
         </div>
       </div>
