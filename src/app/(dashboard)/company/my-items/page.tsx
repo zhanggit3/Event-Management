@@ -29,7 +29,7 @@ export default async function MyItemsPage() {
 
   return (
     <div className="min-h-full">
-      <div className="px-8 py-8 max-w-5xl mx-auto">
+      <div className="px-8 py-8">
         <MyItemsClient
           organizationId={organization.id}
           initialFolders={(folders ?? []) as LibraryFolder[]}

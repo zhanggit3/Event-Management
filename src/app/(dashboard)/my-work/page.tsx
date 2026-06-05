@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MyWorkTable } from "@/components/my-work-table";
-import type { MyWorkRow } from "@/types/database";
+import type { MyWorkRow, MyWorkCustomColumn, MyWorkViewConfig } from "@/types/database";
 
 type ProfileLite = { id: string; full_name: string | null; email: string | null; avatar_url: string | null };
 
@@ -94,6 +94,37 @@ export default async function MyWorkPage() {
     attachmentsByTask.set(a.task_id, arr);
   }
 
+  // (e) the user's personal custom columns, their cell values, and saved layout.
+  // These are a private annotation layer keyed by task_id — never written to tasks.
+  const [{ data: customColumnsRaw }, { data: cellsRaw }, { data: viewRaw }] = await Promise.all([
+    supabase.from("my_work_columns").select("id, name").eq("user_id", me).order("created_at"),
+    taskIds.length
+      ? supabase.from("my_work_cells").select("column_id, task_id, value").in("task_id", taskIds)
+      : Promise.resolve({ data: [] as { column_id: string; task_id: string; value: string | null }[] }),
+    supabase.from("my_work_view").select("column_order, hidden, widths").eq("user_id", me).maybeSingle(),
+  ]);
+
+  const customColumns: MyWorkCustomColumn[] = ((customColumnsRaw ?? []) as MyWorkCustomColumn[]).map(
+    (c) => ({ id: c.id, name: c.name }),
+  );
+
+  // Group cell values into customCells[taskId][columnId] = value.
+  const cellsByTask = new Map<string, Record<string, string>>();
+  for (const cell of (cellsRaw ?? []) as { column_id: string; task_id: string; value: string | null }[]) {
+    if (cell.value == null) continue;
+    const rec = cellsByTask.get(cell.task_id) ?? {};
+    rec[cell.column_id] = cell.value;
+    cellsByTask.set(cell.task_id, rec);
+  }
+
+  const viewConfig: MyWorkViewConfig | null = viewRaw
+    ? {
+        column_order: (viewRaw.column_order as string[] | null) ?? [],
+        hidden: (viewRaw.hidden as string[] | null) ?? [],
+        widths: (viewRaw.widths as Record<string, number> | null) ?? {},
+      }
+    : null;
+
   function toRow(p: ProfileLite | undefined): MyWorkRow["assignee"] {
     if (!p) return null;
     return { full_name: p.full_name ?? p.email ?? "", email: p.email ?? "", avatar_url: p.avatar_url };
@@ -138,15 +169,16 @@ export default async function MyWorkPage() {
         t.component?.event && t.component.slug
           ? `/events/${t.component.event.slug}/${t.component.slug}?task=${t.id}`
           : null,
+      customCells: cellsByTask.get(t.id) ?? {},
     };
   });
 
   return (
     <div className="min-h-full">
-      <div className="px-8 py-8 max-w-7xl mx-auto">
+      <div className="px-8 py-8">
         <h1 className="text-2xl font-bold text-white mb-1">My Work</h1>
         <p className="text-sm text-white/40 mb-6">Tasks assigned to or reported by you.</p>
-        <MyWorkTable rows={rows} />
+        <MyWorkTable rows={rows} customColumns={customColumns} viewConfig={viewConfig} />
       </div>
     </div>
   );

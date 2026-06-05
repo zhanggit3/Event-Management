@@ -14,7 +14,7 @@ export default async function TemplatesPage() {
 
   return (
     <div className="min-h-full">
-      <div className="p-8 max-w-5xl mx-auto">
+      <div className="px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white tracking-tight">Templates</h1>
           <p className="text-sm text-white/40 mt-1">

@@ -206,7 +206,7 @@ export default async function EventDashboardPage({ params }: PageProps) {
     <div className="min-h-screen bg-[#05050F]">
       {/* Page header */}
       <div className="px-8 pt-8 pb-6 border-b border-white/[0.06]">
-        <div className="max-w-6xl mx-auto">
+        <div>
           {/* Back link */}
           <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors mb-5">
             <ChevronRight className="w-3 h-3 rotate-180" />
@@ -271,7 +271,7 @@ export default async function EventDashboardPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="px-8 py-8 max-w-6xl mx-auto">
+      <div className="px-8 py-8">
         {/* Overall progress bar */}
         {totalTasks > 0 && (
           <div className="mb-8">
