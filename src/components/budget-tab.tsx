@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Plus, Trash2, Download, Loader2, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Budget, BudgetLineItem } from "@/types/database";
 import {
   addBudgetLineItem,
@@ -30,10 +30,6 @@ const SECTIONS: { type: "expense" | "revenue"; label: string; totalLabel: string
 
 const STATUS_OPTIONS: BudgetLineItem["status"][] = ["estimated", "quoted", "committed", "paid"];
 const MANUAL_KEY = "__manual__";
-
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-}
 
 // Favorable variance (positive = good = green):
 //  • expenses are good when UNDER estimate  → estimated − actual
@@ -134,9 +130,11 @@ export function BudgetTab(props: BudgetTabProps) {
   function editNumber(id: string, field: "estimated_amount" | "actual_amount", raw: string) {
     setDrafts((d) => ({ ...d, [`${id}:${field}`]: raw }));
     const num = parseFloat(raw);
-    const value = isNaN(num) ? 0 : num;
-    patchLocal(id, { [field]: value } as Partial<BudgetLineItem>);
-    scheduleSave(id, field, value);
+    // Empty / partial input ("", "-", "."): keep the draft visible but DON'T persist — so
+    // clearing a cell to retype never writes 0 or loses the prior value. Typing "0" still saves 0.
+    if (isNaN(num)) return;
+    patchLocal(id, { [field]: num } as Partial<BudgetLineItem>);
+    scheduleSave(id, field, num);
   }
 
   function commitNumber(id: string, field: "estimated_amount" | "actual_amount") {

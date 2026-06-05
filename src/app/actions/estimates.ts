@@ -37,14 +37,20 @@ export async function createEstimate(
 ): Promise<{ data?: EstimateWithDetails; error?: string }> {
   const supabase = await createClient();
 
-  // Self-describing, team-scoped proposal number: EST-{component slug}-{year}-{NNN}.
-  // The sequence restarts per component and uses max-suffix+1 (not count) so it never
-  // collides when an estimate is deleted.
   const { data: comp } = await supabase
     .from("components")
     .select("slug, name")
     .eq("id", componentId)
     .single();
+
+  // Self-describing, team-and-year-scoped proposal number: EST-{slug}-{year}-{NNN}.
+  // The next sequence is max-trailing-number+1 among estimates sharing THIS exact prefix,
+  // so legacy "EST-{year}-NNN" numbers and prior years don't inflate or collide with it.
+  // (proposal_number is display-only — there is no DB uniqueness, so two truly concurrent
+  // creates could still tie; acceptable for a human-facing label.)
+  const year = new Date().getFullYear();
+  const slug = comp?.slug ?? "est";
+  const prefix = `EST-${slug}-${year}-`;
 
   const { data: existing } = await supabase
     .from("estimates")
@@ -52,12 +58,13 @@ export async function createEstimate(
     .eq("component_id", componentId);
 
   const maxSeq = (existing ?? []).reduce((m, r) => {
-    const match = /(\d+)$/.exec(r.proposal_number ?? "");
+    const n = r.proposal_number ?? "";
+    if (!n.startsWith(prefix)) return m;
+    const match = /(\d+)$/.exec(n);
     return match ? Math.max(m, parseInt(match[1], 10)) : m;
   }, 0);
 
-  const year = new Date().getFullYear();
-  const proposal_number = `EST-${comp?.slug ?? "est"}-${year}-${String(maxSeq + 1).padStart(3, "0")}`;
+  const proposal_number = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
   const proposal_name = `${comp?.name ?? "Estimate"} Estimate`;
 
   // F-07: Insert estimate; if activity_id UNIQUE constraint fires, fetch the existing row

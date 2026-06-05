@@ -49,6 +49,7 @@ export async function getOrCreateBudget(
     .select("*")
     .eq("budget_id", budget.id)
     .order("section_type", { ascending: true })
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   return {
@@ -169,30 +170,47 @@ export async function importEstimateIntoBudget(
     supabase.from("estimate_line_items").select("section_id, cells, sort_order").eq("estimate_id", estimateId).order("sort_order"),
   ]);
 
+  // Prefer the column literally named "Item"; fall back to the first text column by sort order.
+  const cols = columns ?? [];
   const itemCol =
-    (columns ?? []).filter((c) => c.col_type === "text").sort((a, b) => a.sort_order - b.sort_order)[0] ??
-    (columns ?? []).find((c) => c.name === "Item");
+    cols.find((c) => c.name.trim().toLowerCase() === "item") ??
+    cols.filter((c) => c.col_type === "text").sort((a, b) => a.sort_order - b.sort_order)[0];
   const qtyId = estimate.qty_column_id;
   const amtId = estimate.amount_column_id;
   const sectionType = new Map((sections ?? []).map((s) => [s.id, s.section_type as "expense" | "revenue"]));
   const proposalName = estimate.proposal_name || estimate.proposal_number;
   const sourceLabel = `${estComp.name} · ${proposalName}`;
 
-  const rows = (lineItems ?? []).map((li, idx) => {
+  // Continue sort_order after the budget's existing rows in each section so imported rows
+  // don't collide with manually-added ones.
+  const { data: existingRows } = await supabase
+    .from("budget_line_items")
+    .select("section_type, sort_order")
+    .eq("budget_id", budgetId);
+  const nextSort = new Map<string, number>();
+  for (const r of existingRows ?? []) {
+    const st = r.section_type as string;
+    nextSort.set(st, Math.max(nextSort.get(st) ?? -1, Number(r.sort_order)));
+  }
+
+  const rows = (lineItems ?? []).map((li) => {
     const cells = (li.cells ?? {}) as Record<string, string>;
     const qty = parseFloat((qtyId && cells[qtyId]) || "0");
     const amt = parseFloat((amtId && cells[amtId]) || "0");
     const estimated = isNaN(qty) || isNaN(amt) ? 0 : qty * amt;
+    const st = sectionType.get(li.section_id) ?? "expense";
+    const order = (nextSort.get(st) ?? -1) + 1;
+    nextSort.set(st, order);
     return {
       budget_id: budgetId,
-      section_type: sectionType.get(li.section_id) ?? "expense",
+      section_type: st,
       item_name: (itemCol && cells[itemCol.id]) || "",
       estimated_amount: estimated || 0,
       actual_amount: 0,
       status: "estimated" as const,
       source_estimate_id: estimateId,
       source_label: sourceLabel,
-      sort_order: idx,
+      sort_order: order,
     };
   });
 

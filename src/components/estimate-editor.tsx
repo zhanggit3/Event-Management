@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, X, Save } from "lucide-react";
-import { cn, formatDate, formatNoteTimestamp } from "@/lib/utils";
+import { cn, formatDate, formatNoteTimestamp, formatCurrency } from "@/lib/utils";
 import type { Estimate, EstimateColumn, EstimateSection, EstimateLineItem } from "@/types/database";
 import {
   updateEstimateStatus,
@@ -95,9 +95,6 @@ export function EstimateEditor(props: EstimateEditorProps) {
     }, 0);
   }
 
-  function formatCurrency(n: number): string {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-  }
 
   // Total column visible only when both qty and amount columns still exist
   const totalVisible =

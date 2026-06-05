@@ -524,4 +524,24 @@ _Event scoping_
 Every functional acceptance criterion is implemented and verified by a clean typecheck and a successful production build; the one Critical bug the evaluator found (non-admin Delete orphaning the activity + resurrecting a blank estimate) was fixed correctly by reversing the delete order to lean on the verified `ON DELETE CASCADE` and adding a precisely-scoped RLS policy, and all four Medium findings (Save flush race, silent delete error, date-only Last Modified, silent estimate-gen branch) were addressed. The only thing short of a clean "all-green" is the event-scoping criterion, which is a deliberate, documented product choice (preserve the org-wide company library; let ISSUE-017 consume the new event-scoped path) rather than a defect — hence it is surfaced for your confirmation rather than silently resolved.
 
 ### PR Feedback Summary
+
+_Covers PR #9 (ISSUE-016 + ISSUE-017). Source: local high-effort `/code-review` (10 findings). No human/bot PR review comments were posted — only the Vercel deploy-bot notice (noise)._
+
+**Total findings:** 10 · **Applied:** 6 · **Skipped:** 4
+
+**Applied**
+1. 🔴 **Legacy estimates orphaned** — `template_type` was never backfilled, so pre-existing estimate activities (template_type NULL) lost their editor link and member-delete ability. Added migration `20260605000002_backfill_estimate_template_type.sql` (sets `template_type='estimate'` for any activity that already owns an estimate); applied to remote.
+2. 🟡 **Proposal-number collisions** — sequence is now scoped to the exact `EST-{slug}-{year}-` prefix (excludes legacy `EST-{year}-NNN` and prior years; per-year reset). Residual: no DB uniqueness, so truly concurrent creates could still tie — documented inline (display-only label).
+3. 🟡 **Number cell cleared → wrote 0** (`budget-tab.tsx editNumber`) — empty/partial input now keeps the draft visible but does NOT persist, so clearing to retype never writes 0 or loses the prior value; typing "0" still saves 0.
+4. 🟡 **Import item-name from wrong column** (`budgets.ts`) — now prefers the column named "Item" (case-insensitive), then the first text column.
+5. 🟡 **sort_order collision / dead column** — `getOrCreateBudget` now orders by `section_type, sort_order, created_at`, and import continues `sort_order` after existing rows per section.
+6. 🔵 **Duplicated `formatCurrency`** — moved to `src/lib/utils.ts`; both `budget-tab.tsx` and `estimate-editor.tsx` import it.
+
+**Skipped (with reason)**
+- 🟡 **getOrCreateBudget INSERT-on-render** — deliberate design, mirrors the estimate page's lazy create; errors are returned (not thrown) and budget content is guarded by `budget &&`, so a failure degrades gracefully.
+- 🔵 **Unmount flush fire-and-forget / deleted-row target** — flush-on-blur covers normal navigation; a stale update to a deleted row is a harmless no-op.
+- 🔵 **Shared debounce-save hook** — real dedup opportunity but a larger cross-component refactor; out of scope for a feedback pass.
+- 🔵 **useMemo the totals recompute** — premature for current data sizes.
+
+**Verification after fixes:** `tsc --noEmit` 0 errors; `next build` success (19 routes).
 </content>
