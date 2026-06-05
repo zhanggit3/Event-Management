@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #016
 
 > Budget tracking (importing an approved estimate into a budget) is tracked separately in **ISSUE-017** — it depends on the event-scoped approved estimates delivered here.

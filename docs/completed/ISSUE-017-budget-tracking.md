@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** Ready for Review
+**Status:** Complete
 **GitHub Issue:** #017
 
 > **Depends on ISSUE-016.** This issue consumes the event-scoped `getApprovedEstimates(organizationId, eventId)` and the `proposal_name` field delivered there. Land ISSUE-016 first.
