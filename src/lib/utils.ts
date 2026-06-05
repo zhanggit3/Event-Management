@@ -13,6 +13,10 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export function formatCurrency(n: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createEstimate } from "@/app/actions/estimates";
 import type { Activity, Task } from "@/types/database";
 
 export async function createActivity(formData: FormData) {
@@ -22,6 +23,7 @@ export async function createActivity(formData: FormData) {
   const assigneeId = formData.get("assignee_id") as string | null;
   const tagsRaw = formData.get("tags") as string | null;
   const tags = tagsRaw ? (JSON.parse(tagsRaw) as string[]) : [];
+  const templateType = (formData.get("template_type") as string) || null;
   const eventSlug = formData.get("event_slug") as string;
   const componentSlug = formData.get("component_slug") as string;
 
@@ -51,11 +53,18 @@ export async function createActivity(formData: FormData) {
       tags,
       reporter_id: user.id,
       sort_order: last ? last.sort_order + 1 : 0,
+      template_type: templateType,
     })
     .select()
     .single();
 
   if (error) return { error: error.message };
+
+  // Estimates template: eagerly generate the estimate sheet under the new activity.
+  // (The estimate page also lazily creates the sheet on first visit as a fallback.)
+  if (templateType === "estimate") {
+    await createEstimate(data.id, componentId, user.id, eventSlug, componentSlug);
+  }
 
   revalidatePath(`/events/${eventSlug}/${componentSlug}`);
   return { data: data as Activity };

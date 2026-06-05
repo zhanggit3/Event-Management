@@ -166,6 +166,7 @@ export interface Activity {
   tags: string[];
   reporter_id: string | null;
   sort_order: number;
+  template_type: string | null;
   created_at: string;
 }
 
@@ -502,10 +503,12 @@ export interface Estimate {
   activity_id: string;
   component_id: string;
   proposal_number: string;
+  proposal_name: string | null;
   status: "draft" | "sent" | "approved" | "declined";
   qty_column_id: string | null;
   amount_column_id: string | null;
   created_by: string;
+  last_modified_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -531,6 +534,30 @@ export interface EstimateLineItem {
   section_id: string;
   estimate_id: string;
   cells: Record<string, string>;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Budget {
+  id: string;
+  component_id: string;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetLineItem {
+  id: string;
+  budget_id: string;
+  section_type: "expense" | "revenue";
+  item_name: string;
+  estimated_amount: number;
+  actual_amount: number;
+  status: "estimated" | "quoted" | "committed" | "paid";
+  notes: string | null;
+  source_estimate_id: string | null;
+  source_label: string | null;
   sort_order: number;
   created_at: string;
 }

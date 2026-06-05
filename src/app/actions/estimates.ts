@@ -9,6 +9,19 @@ export type EstimateWithDetails = {
   sections: (EstimateSection & { lineItems: EstimateLineItem[] })[];
 };
 
+// Stamp the parent estimate's updated_at + last_modified_by on any mutation.
+// Not exported: only callable inside this server-action module.
+async function touchEstimate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  estimateId: string,
+  userId: string,
+) {
+  await supabase
+    .from("estimates")
+    .update({ last_modified_by: userId, updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
+}
+
 /**
  * Creates an estimate for an activity with 4 default columns + 2 sections.
  * Proposal number: EST-{YYYY}-{padded count} per org.
@@ -18,46 +31,46 @@ export type EstimateWithDetails = {
 export async function createEstimate(
   activityId: string,
   componentId: string,
-  organizationId: string,
   userId: string,
   eventSlug: string,
   componentSlug: string
 ): Promise<{ data?: EstimateWithDetails; error?: string }> {
   const supabase = await createClient();
 
-  // Count estimates in this org to generate proposal number
-  const { data: orgEvents } = await supabase
-    .from("events")
-    .select("id")
-    .eq("organization_id", organizationId);
+  const { data: comp } = await supabase
+    .from("components")
+    .select("slug, name")
+    .eq("id", componentId)
+    .single();
 
-  const orgEventIds = (orgEvents ?? []).map(e => e.id);
-
-  let estCount = 0;
-  if (orgEventIds.length > 0) {
-    const { data: orgComponents } = await supabase
-      .from("components")
-      .select("id")
-      .in("event_id", orgEventIds);
-
-    const orgComponentIds = (orgComponents ?? []).map(c => c.id);
-
-    if (orgComponentIds.length > 0) {
-      const { count } = await supabase
-        .from("estimates")
-        .select("id", { count: "exact", head: true })
-        .in("component_id", orgComponentIds);
-      estCount = count ?? 0;
-    }
-  }
-
+  // Self-describing, team-and-year-scoped proposal number: EST-{slug}-{year}-{NNN}.
+  // The next sequence is max-trailing-number+1 among estimates sharing THIS exact prefix,
+  // so legacy "EST-{year}-NNN" numbers and prior years don't inflate or collide with it.
+  // (proposal_number is display-only — there is no DB uniqueness, so two truly concurrent
+  // creates could still tie; acceptable for a human-facing label.)
   const year = new Date().getFullYear();
-  const proposal_number = `EST-${year}-${String(estCount + 1).padStart(3, "0")}`;
+  const slug = comp?.slug ?? "est";
+  const prefix = `EST-${slug}-${year}-`;
+
+  const { data: existing } = await supabase
+    .from("estimates")
+    .select("proposal_number")
+    .eq("component_id", componentId);
+
+  const maxSeq = (existing ?? []).reduce((m, r) => {
+    const n = r.proposal_number ?? "";
+    if (!n.startsWith(prefix)) return m;
+    const match = /(\d+)$/.exec(n);
+    return match ? Math.max(m, parseInt(match[1], 10)) : m;
+  }, 0);
+
+  const proposal_number = `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
+  const proposal_name = `${comp?.name ?? "Estimate"} Estimate`;
 
   // F-07: Insert estimate; if activity_id UNIQUE constraint fires, fetch the existing row
   const { data: estimate, error: estErr } = await supabase
     .from("estimates")
-    .insert({ activity_id: activityId, component_id: componentId, proposal_number, created_by: userId })
+    .insert({ activity_id: activityId, component_id: componentId, proposal_number, proposal_name, created_by: userId })
     .select()
     .single();
 
@@ -153,9 +166,52 @@ export async function updateEstimateStatus(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
-  const { error } = await supabase.from("estimates").update({ status }).eq("id", estimateId);
+  const { error } = await supabase
+    .from("estimates")
+    .update({ status, last_modified_by: user.id, updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
   if (error) return { error: error.message };
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
+  return {};
+}
+
+/** Update the editable proposal name (and stamp modifier). */
+export async function updateEstimateName(
+  estimateId: string,
+  name: string,
+  eventSlug: string,
+  componentSlug: string,
+  activityId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+  const { error } = await supabase
+    .from("estimates")
+    .update({ proposal_name: name.trim() || null, last_modified_by: user.id, updated_at: new Date().toISOString() })
+    .eq("id", estimateId);
+  if (error) return { error: error.message };
+  revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
+  return {};
+}
+
+/**
+ * Delete an estimate by deleting its generated activity. Deleting the activity cascades to the
+ * estimate (estimates_activity_id_fkey is ON DELETE CASCADE), which cascades to its columns,
+ * sections, and line items. Doing it in this single, cascading order keeps the operation atomic:
+ * if RLS blocks the delete, nothing is removed and the error is surfaced to the caller.
+ */
+export async function deleteEstimate(
+  activityId: string,
+  eventSlug: string,
+  componentSlug: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+  const { error } = await supabase.from("activities").delete().eq("id", activityId);
+  if (error) return { error: error.message };
+  revalidatePath(`/events/${eventSlug}/${componentSlug}`);
   return {};
 }
 
@@ -175,6 +231,7 @@ export async function addEstimateRow(
     .select()
     .single();
   if (error) return { error: error.message };
+  await touchEstimate(supabase, estimateId, user.id);
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
   return { data: data as EstimateLineItem };
 }
@@ -188,8 +245,15 @@ export async function deleteEstimateRow(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+  // Look up the parent estimate before deleting so we can stamp it afterwards.
+  const { data: li } = await supabase
+    .from("estimate_line_items")
+    .select("estimate_id")
+    .eq("id", lineItemId)
+    .maybeSingle();
   const { error } = await supabase.from("estimate_line_items").delete().eq("id", lineItemId);
   if (error) return { error: error.message };
+  if (li?.estimate_id) await touchEstimate(supabase, li.estimate_id as string, user.id);
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
   return {};
 }
@@ -198,6 +262,7 @@ export async function upsertEstimateCell(
   lineItemId: string,
   columnId: string,
   value: string,
+  estimateId: string,
   eventSlug: string,
   componentSlug: string,
   activityId: string
@@ -216,6 +281,7 @@ export async function upsertEstimateCell(
   });
   if (error) return { error: error.message };
 
+  await touchEstimate(supabase, estimateId, user.id);
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
   return {};
 }
@@ -248,6 +314,7 @@ export async function addEstimateColumn(
     .select()
     .single();
   if (error) return { error: error.message };
+  await touchEstimate(supabase, estimateId, user.id);
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
   return { data: data as EstimateColumn };
 }
@@ -282,6 +349,7 @@ export async function deleteEstimateColumn(
   }
 
   // qty_column_id / amount_column_id FKs are ON DELETE SET NULL — handled by DB automatically
+  await touchEstimate(supabase, estimateId, user.id);
   revalidatePath(`/events/${eventSlug}/${componentSlug}/estimate/${activityId}`);
   return {};
 }

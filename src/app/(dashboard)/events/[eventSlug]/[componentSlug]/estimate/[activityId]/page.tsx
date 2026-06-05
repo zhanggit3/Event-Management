@@ -19,7 +19,7 @@ export default async function EstimatePage({ params }: PageProps) {
   // Fetch event + component + activity
   const { data: event } = await supabase
     .from("events")
-    .select("id, name, organization_id, event_date, address")
+    .select("id, name")
     .eq("slug", eventSlug)
     .single();
   if (!event) notFound();
@@ -50,7 +50,7 @@ export default async function EstimatePage({ params }: PageProps) {
 
   if (!existingEstimate.data) {
     // F-08: pass user.id so createEstimate doesn't need a second getUser() call
-    const result = await createEstimate(activityId, component.id, event.organization_id, user.id, eventSlug, componentSlug);
+    const result = await createEstimate(activityId, component.id, user.id, eventSlug, componentSlug);
     if (result.error || !result.data) notFound();
     estimateData = result.data;
   } else {
@@ -83,11 +83,22 @@ export default async function EstimatePage({ params }: PageProps) {
     };
   }
 
+  // Resolve the "Modified By" display name from a separate query (FK-join-ambiguity rule).
+  let modifiedByName: string | null = null;
+  if (estimateData.estimate.last_modified_by) {
+    const { data: modifier } = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", estimateData.estimate.last_modified_by)
+      .maybeSingle();
+    modifiedByName = modifier?.full_name || modifier?.email || null;
+  }
+
   return (
     <div className="min-h-screen bg-[#05050F]">
       {/* Toolbar */}
       <div className="border-b border-white/[0.06] bg-[#080814]">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm">
             <Link
               href={`/events/${eventSlug}/${componentSlug}`}
@@ -110,7 +121,7 @@ export default async function EstimatePage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="px-6 py-8">
         <EstimateEditor
           estimate={estimateData.estimate}
           columns={estimateData.columns}
@@ -118,8 +129,10 @@ export default async function EstimatePage({ params }: PageProps) {
           eventSlug={eventSlug}
           componentSlug={componentSlug}
           activityId={activityId}
-          eventDate={event.event_date ?? null}
-          eventAddress={event.address ?? null}
+          proposalName={estimateData.estimate.proposal_name ?? ""}
+          createdAt={estimateData.estimate.created_at}
+          updatedAt={estimateData.estimate.updated_at}
+          modifiedByName={modifiedByName}
         />
       </div>
     </div>
