@@ -380,17 +380,19 @@ function ActivityModal({
                     </div>
                   </div>
 
-                  {/* REPORTER */}
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 pb-1 border-b border-white/[0.06] mb-3">Reporter</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 flex items-center justify-center text-[10px] font-semibold shrink-0">
-                        {reporterInitials}
+                  {/* REPORTER — only meaningful on create (updateActivity never reassigns reporter) */}
+                  {!isEdit && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 pb-1 border-b border-white/[0.06] mb-3">Reporter</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          {reporterInitials}
+                        </div>
+                        <span className="text-xs text-white/60 truncate flex-1">{reporterName}</span>
+                        <span className="shrink-0 text-[10px] bg-emerald-500/15 text-emerald-400 rounded-md px-1.5 py-0.5">AUTO</span>
                       </div>
-                      <span className="text-xs text-white/60 truncate flex-1">{reporterName}</span>
-                      <span className="shrink-0 text-[10px] bg-emerald-500/15 text-emerald-400 rounded-md px-1.5 py-0.5">AUTO</span>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

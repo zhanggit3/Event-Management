@@ -79,21 +79,36 @@ export async function instantiateTemplateComponent(
     name: string;
     slug: string;
     color: string | null;
+    icon?: string | null;
     sortOrder: number;
     tasksJson: string | null;
     structureRaw: string | null;
     userId: string | null;
   },
 ): Promise<{ componentId?: string; error?: string }> {
-  const { eventId, name, slug, color, sortOrder, tasksJson, structureRaw, userId } = input;
+  const { eventId, name, slug, color, icon, sortOrder, tasksJson, structureRaw, userId } = input;
+
+  // Ensure the slug is unique within the event. Callers pass a best-effort slug;
+  // deduping here keeps every caller (Create-Event batch, Add-Component dialog) safe
+  // from the unique(event_id, slug) constraint without each re-implementing it.
+  const { data: existingComponents } = await supabase
+    .from("components")
+    .select("slug")
+    .eq("event_id", eventId);
+  const taken = new Set((existingComponents ?? []).map((c) => c.slug as string));
+  const base = slug || "component";
+  let uniqueSlug = base;
+  let n = 2;
+  while (taken.has(uniqueSlug)) uniqueSlug = `${base}-${n++}`;
 
   const { data: component, error: compError } = await supabase
     .from("components")
     .insert({
       event_id: eventId,
       name: name.trim(),
-      slug,
+      slug: uniqueSlug,
       color: color || null,
+      icon: icon || null,
       sort_order: sortOrder,
       is_active: true,
     })

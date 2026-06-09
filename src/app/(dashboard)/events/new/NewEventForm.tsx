@@ -4,11 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createEvent } from "@/app/actions/events";
+import { slugify } from "@/lib/utils";
 import type { ComponentTemplate } from "@/types/database";
-
-function slugify(text: string) {
-  return text.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
-}
 
 export function NewEventForm({ orgId, templates }: { orgId: string; templates: ComponentTemplate[] }) {
   const router = useRouter();

@@ -5,7 +5,7 @@ import { EventCard, EmptyEventsState } from "@/components/event-card";
 import { getDashboardData } from "@/lib/queries/dashboard-events";
 
 export default async function EventsPage() {
-  const { firstName, workspaceEvents, events, allOrgInfos, noOrg } = await getDashboardData();
+  const { firstName, workspaceEvents, events, allOrgInfos, noOrg, hasWorkspace } = await getDashboardData();
 
   if (noOrg) {
     return (
@@ -98,7 +98,7 @@ export default async function EventsPage() {
 
         {/* Empty state — no events anywhere */}
         {totalEvents === 0 && (
-          <EmptyEventsState isGuest={!allOrgInfos.some((m) => m.role !== "guest")} />
+          <EmptyEventsState isGuest={!hasWorkspace && !allOrgInfos.some((m) => m.role !== "guest")} />
         )}
       </div>
     </div>

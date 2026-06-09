@@ -48,7 +48,7 @@ export async function createEvent(formData: FormData) {
 
   // Auto-create the Finance component on every new event. It starts empty — estimates are now
   // added via the "Estimates" activity template (ISSUE-016), not auto-seeded here.
-  await supabase
+  const { error: financeError } = await supabase
     .from("components")
     .insert({
       event_id: event.id,
@@ -59,30 +59,27 @@ export async function createEvent(formData: FormData) {
       sort_order: 0,
       is_active: true,
     });
+  // Non-fatal: the event already exists, but a missing Finance component is worth a log.
+  if (financeError) console.error("createEvent: Finance component insert failed", financeError);
 
   // Spin up any component templates the user selected on the Create Event form (ISSUE-018 #6).
-  // Org-scoped fetch validates ownership; slugs are deduped against Finance and each other.
+  // Org-scoped fetch validates ownership; instantiateTemplateComponent dedupes each slug
+  // against the event's existing components (incl. Finance and earlier templates in this batch).
   if (templateIds.length > 0 && user) {
     const { data: templates } = await supabase
       .from("component_templates")
-      .select("id, name, color, tasks_json, structure_json")
+      .select("id, name, color, icon, tasks_json, structure_json")
       .in("id", templateIds)
       .eq("organization_id", orgId);
 
-    const usedSlugs = new Set<string>(["finance"]);
     let sortOrder = 1;
     for (const t of templates ?? []) {
-      const base = slugify(t.name as string) || "component";
-      let unique = base;
-      let n = 2;
-      while (usedSlugs.has(unique)) unique = `${base}-${n++}`;
-      usedSlugs.add(unique);
-
       const res = await instantiateTemplateComponent(supabase, {
         eventId: event.id,
         name: t.name as string,
-        slug: unique,
+        slug: slugify(t.name as string) || "component",
         color: (t.color as string) || null,
+        icon: (t.icon as string) || null,
         sortOrder: sortOrder++,
         tasksJson: t.tasks_json ? JSON.stringify(t.tasks_json) : null,
         structureRaw: t.structure_json ? JSON.stringify(t.structure_json) : null,

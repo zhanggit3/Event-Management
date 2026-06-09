@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ export function IconTooltip({ label, children, side = "right" }: IconTooltipProp
   const wrapRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
 
-  function show() {
+  const show = useCallback(() => {
     const el = wrapRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -29,10 +29,24 @@ export function IconTooltip({ label, children, side = "right" }: IconTooltipProp
     } else {
       setCoords({ left: r.left + r.width / 2, top: r.top - 6 });
     }
-  }
+  }, [side]);
   function hide() {
     setCoords(null);
   }
+
+  // While shown, keep the portaled (fixed) label glued to the trigger: a scroll or
+  // resize moves the trigger but not the label, so recompute coords on those events.
+  useEffect(() => {
+    if (!coords) return;
+    window.addEventListener("scroll", show, true);
+    window.addEventListener("resize", show);
+    return () => {
+      window.removeEventListener("scroll", show, true);
+      window.removeEventListener("resize", show);
+    };
+    // Re-bind only when visibility toggles; `show` is stable per `side`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords !== null, show]);
 
   return (
     <div

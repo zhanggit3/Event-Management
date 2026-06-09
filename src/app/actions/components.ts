@@ -80,6 +80,7 @@ export async function createComponentFromTemplate(formData: FormData) {
     name,
     slug: slugify(name),
     color: color || null,
+    icon: (formData.get("icon") as string) || null,
     sortOrder,
     tasksJson: tasksJson || null,
     structureRaw,
