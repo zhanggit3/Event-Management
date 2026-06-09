@@ -6,7 +6,7 @@ import { EventCard, EmptyEventsState } from "@/components/event-card";
 import { getDashboardData } from "@/lib/queries/dashboard-events";
 
 export default async function DashboardPage() {
-  const { firstName, workspaceEvents, events, allOrgInfos, noOrg, componentRedirectSlug } =
+  const { firstName, workspaceEvents, events, allOrgInfos, noOrg, hasWorkspace, componentRedirectSlug } =
     await getDashboardData();
 
   // Component-scope-only users are bounced straight to their event.
@@ -114,7 +114,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             // No events at all — guest-aware (guests can't create, so don't push them to).
-            <EmptyEventsState isGuest={!allOrgInfos.some((m) => m.role !== "guest")} />
+            <EmptyEventsState isGuest={!hasWorkspace && !allOrgInfos.some((m) => m.role !== "guest")} />
           )}
         </div>
       </div>

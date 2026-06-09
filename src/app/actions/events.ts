@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
+import { instantiateTemplateComponent } from "@/lib/templates/instantiate";
 
 export async function createEvent(formData: FormData) {
   const supabase = await createClient();
@@ -15,6 +16,14 @@ export async function createEvent(formData: FormData) {
   const eventDate = formData.get("event_date") as string;
   const address = formData.get("address") as string;
   const orgId = formData.get("organization_id") as string;
+  const templateIdsRaw = formData.get("template_ids") as string | null;
+  let templateIds: string[] = [];
+  if (templateIdsRaw) {
+    try {
+      const parsed = JSON.parse(templateIdsRaw);
+      if (Array.isArray(parsed)) templateIds = parsed.filter((x): x is string => typeof x === "string");
+    } catch { /* ignore malformed selection */ }
+  }
 
   if (!name?.trim()) return { error: "Event name is required" };
 
@@ -39,7 +48,7 @@ export async function createEvent(formData: FormData) {
 
   // Auto-create the Finance component on every new event. It starts empty — estimates are now
   // added via the "Estimates" activity template (ISSUE-016), not auto-seeded here.
-  await supabase
+  const { error: financeError } = await supabase
     .from("components")
     .insert({
       event_id: event.id,
@@ -50,6 +59,36 @@ export async function createEvent(formData: FormData) {
       sort_order: 0,
       is_active: true,
     });
+  // Non-fatal: the event already exists, but a missing Finance component is worth a log.
+  if (financeError) console.error("createEvent: Finance component insert failed", financeError);
+
+  // Spin up any component templates the user selected on the Create Event form (ISSUE-018 #6).
+  // Org-scoped fetch validates ownership; instantiateTemplateComponent dedupes each slug
+  // against the event's existing components (incl. Finance and earlier templates in this batch).
+  if (templateIds.length > 0 && user) {
+    const { data: templates } = await supabase
+      .from("component_templates")
+      .select("id, name, color, icon, tasks_json, structure_json")
+      .in("id", templateIds)
+      .eq("organization_id", orgId);
+
+    let sortOrder = 1;
+    for (const t of templates ?? []) {
+      const res = await instantiateTemplateComponent(supabase, {
+        eventId: event.id,
+        name: t.name as string,
+        slug: slugify(t.name as string) || "component",
+        color: (t.color as string) || null,
+        icon: (t.icon as string) || null,
+        sortOrder: sortOrder++,
+        tasksJson: t.tasks_json ? JSON.stringify(t.tasks_json) : null,
+        structureRaw: t.structure_json ? JSON.stringify(t.structure_json) : null,
+        userId: user.id,
+      });
+      // Non-fatal: a failed template doesn't block event creation, but surface it in logs.
+      if (res.error) console.error(`createEvent: template ${t.id} instantiation failed`, res.error);
+    }
+  }
 
   revalidatePath("/");
   return { slug: event.slug };

@@ -65,25 +65,37 @@ const ACTIVITY_STATUS_STYLE: Record<Activity["status"], string> = {
 
 // ── New Activity Modal ─────────────────────────────────────────────────────────
 
-function NewActivityModal({
+function ActivityModal({
   componentId, eventSlug, componentSlug, onCreated, members, currentUser,
+  mode = "create", activity, open: controlledOpen, onOpenChange, onUpdated,
 }: {
   componentId: string; eventSlug: string; componentSlug: string;
   onCreated: (a: Activity) => void;
   members: Profile[];
   currentUser?: Profile | null;
+  mode?: "create" | "edit";
+  activity?: Activity;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onUpdated?: (a: Activity) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [color, setColor] = useState(PRESET_COLORS[0]);
-  const [status, setStatus] = useState<Activity["status"]>("active");
-  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical" | "">("");
-  const [startDate, setStartDate] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const isEdit = mode === "edit";
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (v: boolean) => { if (onOpenChange) onOpenChange(v); else setInternalOpen(v); };
+
+  const [name, setName] = useState(activity?.name ?? "");
+  const [description, setDescription] = useState(activity?.description ?? "");
+  const [color, setColor] = useState(activity?.color ?? PRESET_COLORS[0]);
+  const [status, setStatus] = useState<Activity["status"]>(activity?.status ?? "active");
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "critical" | "">(activity?.priority ?? "");
+  // <input type="date"> only accepts YYYY-MM-DD; slice guards against any ISO/timestamp value
+  // so editing never silently blanks (and then clobbers) an existing date.
+  const [startDate, setStartDate] = useState((activity?.start_date ?? "").slice(0, 10));
+  const [dueDate, setDueDate] = useState((activity?.due_date ?? "").slice(0, 10));
+  const [ownerId, setOwnerId] = useState(activity?.owner_id ?? "");
+  const [assigneeId, setAssigneeId] = useState(activity?.assignee_id ?? "");
+  const [tags, setTags] = useState<string[]>(activity?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [templateType, setTemplateType] = useState<"" | "estimate">("");
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +106,12 @@ function NewActivityModal({
     setStatus("active"); setPriority(""); setStartDate(""); setDueDate("");
     setOwnerId(""); setAssigneeId(""); setTags([]); setTagInput("");
     setTemplateType(""); setError(null);
+  }
+
+  // Close the modal; reset fields only in create mode (edit instances are unmounted by the parent).
+  function closeModal() {
+    setOpen(false);
+    if (!isEdit) reset();
   }
 
   function addTag() {
@@ -118,6 +136,29 @@ function NewActivityModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+
+    // Edit mode: patch every field via updateActivity (which takes a partial object, not FormData).
+    if (isEdit && activity) {
+      const updates = {
+        name: name.trim(),
+        description: description.trim() || null,
+        color,
+        status,
+        priority: priority || null,
+        start_date: startDate || null,
+        due_date: dueDate || null,
+        owner_id: ownerId || null,
+        assignee_id: assigneeId || null,
+        tags,
+      };
+      startTransition(async () => {
+        const result = await updateActivity(activity.id, updates, eventSlug, componentSlug);
+        if ("error" in result) setError(result.error ?? "Could not save the activity.");
+        else { onUpdated?.({ ...activity, ...updates }); setOpen(false); }
+      });
+      return;
+    }
+
     const fd = new FormData();
     fd.set("component_id", componentId);
     fd.set("name", name.trim());
@@ -147,16 +188,18 @@ function NewActivityModal({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 h-9 px-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-xl font-semibold text-white text-xs transition-all"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        New Activity
-      </button>
+      {!isEdit && (
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 h-9 px-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-xl font-semibold text-white text-xs transition-all"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New Activity
+        </button>
+      )}
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => { setOpen(false); reset(); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={closeModal}>
           <div
             className="bg-[#0D0D1C] border border-white/10 rounded-2xl w-full max-w-[720px] max-h-[90vh] flex flex-col shadow-2xl shadow-black/60"
             onClick={(e) => e.stopPropagation()}
@@ -165,10 +208,10 @@ function NewActivityModal({
             <div className="px-5 py-4 flex items-center justify-between shrink-0 border-b border-white/[0.07]">
               <div className="flex items-center gap-2">
                 <span className="text-indigo-400">◈</span>
-                <span className="text-sm font-semibold text-white">New Activity</span>
+                <span className="text-sm font-semibold text-white">{isEdit ? "Edit Activity" : "New Activity"}</span>
               </div>
               <button
-                onClick={() => { setOpen(false); reset(); }}
+                onClick={closeModal}
                 className="text-white/30 hover:text-white transition-colors text-lg leading-none"
               >
                 ✕
@@ -233,7 +276,8 @@ function NewActivityModal({
                     <p className="mt-1 text-[10px] text-white/30">Press Enter or comma to add a tag</p>
                   </div>
 
-                  {/* Template */}
+                  {/* Template (create only) */}
+                  {!isEdit && (
                   <div>
                     <label className="block text-xs font-semibold text-white/50 uppercase tracking-widest mb-1.5">Template</label>
                     <button
@@ -257,6 +301,7 @@ function NewActivityModal({
                         : "Leave off for a standard activity."}
                     </p>
                   </div>
+                  )}
                 </div>
 
                 {/* Right column — 40% */}
@@ -335,29 +380,31 @@ function NewActivityModal({
                     </div>
                   </div>
 
-                  {/* REPORTER */}
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 pb-1 border-b border-white/[0.06] mb-3">Reporter</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 flex items-center justify-center text-[10px] font-semibold shrink-0">
-                        {reporterInitials}
+                  {/* REPORTER — only meaningful on create (updateActivity never reassigns reporter) */}
+                  {!isEdit && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 pb-1 border-b border-white/[0.06] mb-3">Reporter</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          {reporterInitials}
+                        </div>
+                        <span className="text-xs text-white/60 truncate flex-1">{reporterName}</span>
+                        <span className="shrink-0 text-[10px] bg-emerald-500/15 text-emerald-400 rounded-md px-1.5 py-0.5">AUTO</span>
                       </div>
-                      <span className="text-xs text-white/60 truncate flex-1">{reporterName}</span>
-                      <span className="shrink-0 text-[10px] bg-emerald-500/15 text-emerald-400 rounded-md px-1.5 py-0.5">AUTO</span>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
               {/* Footer */}
               <div className="border-t border-white/[0.07] px-6 py-4 flex justify-end gap-3 shrink-0">
-                <button type="button" onClick={() => { setOpen(false); reset(); }}
+                <button type="button" onClick={closeModal}
                   className="h-9 px-5 bg-white/[0.06] border border-white/10 rounded-xl font-semibold text-xs text-white/70 hover:bg-white/[0.1] hover:text-white transition-all">
                   Cancel
                 </button>
                 <button type="submit" disabled={!name.trim() || isPending}
                   className="h-9 px-5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-xl font-semibold text-xs text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isPending ? "Creating…" : "Create Activity →"}
+                  {isPending ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save Changes" : "Create Activity →")}
                 </button>
               </div>
             </form>
@@ -383,7 +430,7 @@ function StatusIcon({ status, onClick }: { status: Task["status"]; onClick: () =
 // ── Activity Row (Jira-style flat list) ────────────────────────────────────────
 
 function ActivityRow({
-  activity, tasks, isExpanded, onToggle, onTaskSelect, onAddTask, onDelete, onRename, eventSlug, componentSlug, onTaskStatusChange,
+  activity, tasks, isExpanded, onToggle, onTaskSelect, onAddTask, onDelete, onEdit, eventSlug, componentSlug, onTaskStatusChange,
 }: {
   activity: Activity;
   tasks: TaskWithAssignee[];
@@ -392,21 +439,13 @@ function ActivityRow({
   onTaskSelect: (task: TaskWithAssignee) => void;
   onAddTask: () => void;
   onDelete: () => void;
-  onRename: (name: string) => void;
+  onEdit: () => void;
   eventSlug: string;
   componentSlug: string;
   onTaskStatusChange: (taskId: string, status: Task["status"]) => void;
 }) {
-  const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(activity.name);
   const topLevel = tasks.filter((t) => !t.parent_task_id);
   const doneCount = topLevel.filter((t) => t.status === "done").length;
-
-  function saveName() {
-    setEditingName(false);
-    if (nameInput.trim() && nameInput.trim() !== activity.name) onRename(nameInput.trim());
-    else setNameInput(activity.name);
-  }
 
   function cycleStatus(task: TaskWithAssignee) {
     const next: Task["status"] = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
@@ -424,16 +463,7 @@ function ActivityRow({
           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
 
-        {editingName ? (
-          <input
-            autoFocus value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") { setNameInput(activity.name); setEditingName(false); } }}
-            className="flex-1 text-sm font-semibold text-white bg-transparent border-0 border-b border-indigo-500/50 focus:outline-none"
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : activity.template_type === "estimate" ? (
+        {activity.template_type === "estimate" ? (
           <Link
             href={`/events/${eventSlug}/${componentSlug}/estimate/${activity.id}`}
             onClick={(e) => e.stopPropagation()}
@@ -452,8 +482,8 @@ function ActivityRow({
         </span>
 
         <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
-          <IconTooltip label="Rename" side="top">
-            <button onClick={(e) => { e.stopPropagation(); setEditingName(true); }}
+          <IconTooltip label="Edit" side="top">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
               className="h-6 w-6 flex items-center justify-center rounded-lg text-white/30 hover:bg-white/[0.07] hover:text-white transition-all">
               <Pencil className="w-3 h-3" />
             </button>
@@ -548,6 +578,7 @@ export function DashboardTab({
   const { tasks, setTasks } = useComponentTasks();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelState>(null);
+  const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [, startTransition] = useTransition();
   const deepLinkFiredRef = useRef(false);
 
@@ -605,9 +636,8 @@ export function DashboardTab({
     startTransition(async () => { await deleteActivity(activityId, eventSlug, componentSlug); });
   }
 
-  function handleActivityRename(activityId: string, name: string) {
-    setActivities((prev) => prev.map((a) => a.id === activityId ? { ...a, name } : a));
-    startTransition(async () => { await updateActivity(activityId, { name }, eventSlug, componentSlug); });
+  function handleActivityUpdated(updated: Activity) {
+    setActivities((prev) => prev.map((a) => a.id === updated.id ? updated : a));
   }
 
   return (
@@ -667,13 +697,13 @@ export function DashboardTab({
             <h2 className="text-xs font-semibold text-white/40 uppercase tracking-widest">Activities</h2>
             <span className="text-xs text-white/30 bg-white/[0.06] rounded-md px-2 py-0.5">{activities.length}</span>
           </div>
-          <NewActivityModal componentId={componentId} eventSlug={eventSlug} componentSlug={componentSlug} onCreated={handleActivityCreated} members={members} currentUser={currentUser} />
+          <ActivityModal componentId={componentId} eventSlug={eventSlug} componentSlug={componentSlug} onCreated={handleActivityCreated} members={members} currentUser={currentUser} />
         </div>
 
         {activities.length === 0 ? (
           <div className="border border-dashed border-white/10 rounded-xl p-12 flex flex-col items-center gap-4">
             <p className="text-xs text-white/40">No activities yet — create one to start adding tasks</p>
-            <NewActivityModal componentId={componentId} eventSlug={eventSlug} componentSlug={componentSlug} onCreated={handleActivityCreated} members={members} currentUser={currentUser} />
+            <ActivityModal componentId={componentId} eventSlug={eventSlug} componentSlug={componentSlug} onCreated={handleActivityCreated} members={members} currentUser={currentUser} />
           </div>
         ) : (
           <div>
@@ -687,7 +717,7 @@ export function DashboardTab({
                 onTaskSelect={(task) => setPanel({ mode: "edit", task })}
                 onAddTask={() => { setExpandedId(activity.id); setPanel({ mode: "create", activityId: activity.id }); }}
                 onDelete={() => handleActivityDelete(activity.id)}
-                onRename={(name) => handleActivityRename(activity.id, name)}
+                onEdit={() => setEditActivity(activity)}
                 eventSlug={eventSlug}
                 componentSlug={componentSlug}
                 onTaskStatusChange={handleTaskStatusChange}
@@ -696,6 +726,24 @@ export function DashboardTab({
           </div>
         )}
       </div>
+
+      {/* ── Edit Activity modal (full editor) ─────────────────────────────── */}
+      {editActivity && (
+        <ActivityModal
+          key={editActivity.id}
+          mode="edit"
+          activity={editActivity}
+          open
+          onOpenChange={(o) => { if (!o) setEditActivity(null); }}
+          onUpdated={(a) => { handleActivityUpdated(a); setEditActivity(null); }}
+          componentId={componentId}
+          eventSlug={eventSlug}
+          componentSlug={componentSlug}
+          members={members}
+          currentUser={currentUser}
+          onCreated={() => {}}
+        />
+      )}
 
       {/* ── Task detail panel ─────────────────────────────────────────────── */}
       {panel?.mode === "edit" && (

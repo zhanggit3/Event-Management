@@ -21,6 +21,8 @@ export type DashboardData = {
   events: EventRow[];
   allOrgInfos: { org: OrgInfo; role: string }[];
   noOrg: boolean;
+  /** True when the user belongs to a personal workspace org (is_workspace=true). */
+  hasWorkspace: boolean;
   /** Set when a component-scope-only user should be bounced straight to their event. */
   componentRedirectSlug: string | null;
 };
@@ -39,12 +41,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   let events: EventRow[] = [];
   let workspaceEvents: EventRow[] = [];
   let noOrg = false;
+  let hasWorkspace = false;
   let firstName = "";
   let displayName = "";
   let componentRedirectSlug: string | null = null;
 
   if (!user) {
-    return { firstName, displayName, workspaceEvents, events, allOrgInfos, noOrg, componentRedirectSlug };
+    return { firstName, displayName, workspaceEvents, events, allOrgInfos, noOrg, hasWorkspace, componentRedirectSlug };
   }
 
   // Fetch profile for name
@@ -97,6 +100,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const workspaceMembership = (orgMemberships ?? []).find(
     (m) => (m.organizations as unknown as { is_workspace: boolean })?.is_workspace === true
   );
+  hasWorkspace = Boolean(workspaceMembership);
   if (workspaceMembership) {
     const wsOrgId = (workspaceMembership.organizations as unknown as { id: string }).id;
     const { data: wsData } = await supabase
@@ -154,9 +158,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     }
   }
 
-  if (allOrgInfos.length === 0 && events.length === 0 && workspaceEvents.length === 0) {
+  // A user with a personal workspace (or any org/event membership) is NOT "no org" even
+  // with zero events — they should see their workspace dashboard, not the NoOrgPrompt.
+  if (!hasWorkspace && allOrgInfos.length === 0 && events.length === 0) {
     noOrg = true;
   }
 
-  return { firstName, displayName, workspaceEvents, events, allOrgInfos, noOrg, componentRedirectSlug };
+  return { firstName, displayName, workspaceEvents, events, allOrgInfos, noOrg, hasWorkspace, componentRedirectSlug };
 }

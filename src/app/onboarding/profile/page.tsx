@@ -299,7 +299,7 @@ export default function OnboardingProfilePage() {
             {step === 2 && roles.length === 0 && (
               <button
                 onClick={() => { setError(null); setRoles([]); setStep(3); }}
-                className="text-sm text-white/30 hover:text-white/50 transition-colors"
+                className="h-11 px-5 rounded-xl bg-white/[0.06] border border-white/10 text-white/70 text-sm font-medium hover:bg-white/[0.1] hover:text-white transition-all disabled:opacity-50"
               >
                 Skip
               </button>
@@ -308,9 +308,9 @@ export default function OnboardingProfilePage() {
               <button
                 onClick={() => handleSubmit(false)}
                 disabled={isLoading}
-                className="text-sm text-white/30 hover:text-white/50 transition-colors disabled:opacity-50"
+                className="h-11 px-5 rounded-xl bg-white/[0.06] border border-white/10 text-white/70 text-sm font-medium hover:bg-white/[0.1] hover:text-white transition-all disabled:opacity-50"
               >
-                Skip
+                Skip for now
               </button>
             )}
           </div>

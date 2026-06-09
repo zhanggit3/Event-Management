@@ -4,69 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { TemplateActivity, ComponentTemplate } from "@/types/database";
+import {
+  parseStructure,
+  coerceTaskPriority,
+  coerceActivityPriority,
+  instantiateTemplateComponent,
+} from "@/lib/templates/instantiate";
 
 const VALID_MEMBER_ROLES = ["lead", "member"] as const;
 type MemberRole = typeof VALID_MEMBER_ROLES[number];
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
-
-const TASK_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
-const ACTIVITY_PRIORITIES = ["low", "medium", "high", "critical"] as const;
-
-type TemplateTask = {
-  title: string;
-  description?: string;
-  priority?: "low" | "medium" | "high" | "urgent";
-};
-
-function coerceTaskPriority(p: unknown): "low" | "medium" | "high" | "urgent" {
-  return (TASK_PRIORITIES as readonly string[]).includes(p as string)
-    ? (p as "low" | "medium" | "high" | "urgent")
-    : "medium";
-}
-function coerceActivityPriority(p: unknown): "low" | "medium" | "high" | "critical" | null {
-  return (ACTIVITY_PRIORITIES as readonly string[]).includes(p as string)
-    ? (p as "low" | "medium" | "high" | "critical")
-    : null;
-}
-
-/** Parse a JSON string into TemplateActivity[], tolerating malformed input (returns []). */
-function parseStructure(raw: string | null): TemplateActivity[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Blank-named activities/tasks/subtasks are dropped (the editor lets users add empty
-    // rows; we never persist or instantiate nameless entries).
-    const nonBlank = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
-    return parsed
-      .filter((a): a is Record<string, unknown> => nonBlank(a?.name))
-      .map((a) => ({
-        name: (a.name as string).trim(),
-        description: typeof a.description === "string" ? a.description : undefined,
-        priority: coerceActivityPriority(a.priority),
-        tasks: Array.isArray(a.tasks)
-          ? (a.tasks as Record<string, unknown>[])
-              .filter((t) => nonBlank(t?.title))
-              .map((t) => ({
-                title: (t.title as string).trim(),
-                description: typeof t.description === "string" ? t.description : undefined,
-                priority: coerceTaskPriority(t.priority),
-                subtasks: Array.isArray(t.subtasks)
-                  ? (t.subtasks as Record<string, unknown>[])
-                      .filter((s) => nonBlank(s?.title))
-                      .map((s) => ({
-                        title: (s.title as string).trim(),
-                        description: typeof s.description === "string" ? s.description : undefined,
-                        priority: coerceTaskPriority(s.priority),
-                      }))
-                  : [],
-              }))
-          : [],
-      }));
-  } catch {
-    return [];
-  }
-}
 
 export async function createComponent(formData: FormData) {
   const supabase = await createClient();
@@ -128,138 +75,18 @@ export async function createComponentFromTemplate(formData: FormData) {
 
   const sortOrder = existing ? existing.sort_order + 1 : 0;
 
-  const { data: component, error: compError } = await supabase
-    .from("components")
-    .insert({
-      event_id: eventId,
-      name: name.trim(),
-      slug: slugify(name),
-      color: color || null,
-      sort_order: sortOrder,
-      is_active: true,
-    })
-    .select()
-    .single();
-
-  if (compError || !component) return { error: compError?.message ?? "Failed to create component" };
-
-  // Prefer the nested structure (activities → tasks → subtasks). Fall back to the
-  // flat tasks_json for templates saved before ISSUE-012. Each tier is wrapped so a
-  // single failure can't abort component creation (the component already exists).
-  const structure = parseStructure(structureRaw);
-
-  if (structure.length > 0 && user) {
-    try {
-      for (let ai = 0; ai < structure.length; ai++) {
-        const act = structure[ai];
-        const { data: newActivity } = await supabase
-          .from("activities")
-          .insert({
-            component_id: component.id,
-            name: act.name,
-            description: act.description || null,
-            color: "#6366f1",
-            status: "active",
-            priority: coerceActivityPriority(act.priority),
-            reporter_id: user.id,
-            sort_order: ai,
-          })
-          .select("id")
-          .single();
-        if (!newActivity) continue;
-
-        for (const task of act.tasks) {
-          const { data: newTask } = await supabase
-            .from("tasks")
-            .insert({
-              component_id: component.id,
-              activity_id: newActivity.id,
-              parent_task_id: null,
-              title: task.title,
-              description: task.description || null,
-              priority: coerceTaskPriority(task.priority),
-              status: "todo",
-              created_by: user.id,
-            })
-            .select("id")
-            .single();
-          if (!newTask) continue;
-
-          if (task.subtasks.length > 0) {
-            // tasks.activity_id is NOT NULL — a subtask carries its parent task's activity.
-            await supabase.from("tasks").insert(
-              task.subtasks.map((s) => ({
-                component_id: component.id,
-                activity_id: newActivity.id,
-                parent_task_id: newTask.id,
-                title: s.title,
-                description: s.description || null,
-                priority: coerceTaskPriority(s.priority),
-                status: "todo",
-                created_by: user.id,
-              }))
-            );
-          }
-        }
-      }
-    } catch (e) {
-      // Structure instantiation failed partway — component was still created successfully.
-      console.error("createComponentFromTemplate: structure instantiation failed", e);
-    }
-  } else if (tasksJson && user) {
-    // Legacy flat-tasks fallback (templates saved before ISSUE-012, no structure).
-    let tasks: TemplateTask[] = [];
-    try {
-      const parsed = JSON.parse(tasksJson);
-      if (Array.isArray(parsed)) {
-        tasks = parsed.filter((t): t is TemplateTask => typeof t?.title === "string");
-      }
-    } catch {
-      // Malformed tasks JSON — skip task insertion, component was created successfully
-    }
-    if (tasks.length > 0) {
-      // The flat-tasks path is all-or-nothing: if the home activity or its tasks can't
-      // be created, roll back the component we already inserted so the user sees a clean
-      // failure (and a retry doesn't strand a duplicate, task-less component). Deleting
-      // the component cascades to any partial activity/tasks (same as deleteComponent).
-      const rollback = async (message: string) => {
-        await supabase.from("components").delete().eq("id", component.id);
-        return { error: message };
-      };
-      // tasks.activity_id is NOT NULL — flat tasks need a home activity, so create one.
-      const { data: defaultActivity, error: activityError } = await supabase
-        .from("activities")
-        .insert({
-          component_id: component.id,
-          name: "Tasks",
-          color: "#6366f1",
-          status: "active",
-          reporter_id: user.id,
-          sort_order: 0,
-        })
-        .select("id")
-        .single();
-      if (!defaultActivity) {
-        console.error("createComponentFromTemplate: default activity insert failed", activityError);
-        return rollback(activityError?.message ?? "Could not create the component's tasks.");
-      }
-      const { error: tasksError } = await supabase.from("tasks").insert(
-        tasks.map((t) => ({
-          component_id: component.id,
-          activity_id: defaultActivity.id,
-          title: t.title,
-          description: t.description || null,
-          priority: coerceTaskPriority(t.priority),
-          status: "todo",
-          created_by: user.id,
-        }))
-      );
-      if (tasksError) {
-        console.error("createComponentFromTemplate: legacy task insert failed", tasksError);
-        return rollback(tasksError.message);
-      }
-    }
-  }
+  const result = await instantiateTemplateComponent(supabase, {
+    eventId,
+    name,
+    slug: slugify(name),
+    color: color || null,
+    icon: (formData.get("icon") as string) || null,
+    sortOrder,
+    tasksJson: tasksJson || null,
+    structureRaw,
+    userId: user?.id ?? null,
+  });
+  if (result.error) return { error: result.error };
 
   revalidatePath(`/events/${eventSlug}`);
   revalidatePath(`/events/${eventSlug}/settings`);

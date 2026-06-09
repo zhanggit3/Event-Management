@@ -4,19 +4,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createEvent } from "@/app/actions/events";
+import { slugify } from "@/lib/utils";
+import type { ComponentTemplate } from "@/types/database";
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-export function NewEventForm({ orgId }: { orgId: string }) {
+export function NewEventForm({ orgId, templates }: { orgId: string; templates: ComponentTemplate[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [address, setAddress] = useState("");
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleTemplate(id: string) {
+    setSelectedTemplateIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +41,7 @@ export function NewEventForm({ orgId }: { orgId: string }) {
     formData.set("event_date", eventDate);
     formData.set("address", address);
     formData.set("organization_id", orgId);
+    formData.set("template_ids", JSON.stringify(selectedTemplateIds));
 
     try {
       const result = await createEvent(formData);
@@ -46,7 +50,7 @@ export function NewEventForm({ orgId }: { orgId: string }) {
         setError(result.error ?? "Unknown error");
         setLoading(false);
       } else if ("slug" in result) {
-        window.location.href = `/events/${result.slug}/settings`;
+        window.location.href = `/events/${result.slug}`;
       }
     } catch (err) {
       setError(String(err));
@@ -201,42 +205,66 @@ export function NewEventForm({ orgId }: { orgId: string }) {
           </form>
         </div>
 
-        {/* Component templates reference */}
-        <div className="mt-8">
-          <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-4">
-            Component Templates
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { title: "Festival / Culture Fest", components: ["Community Hub", "Finance", "Marketing", "Performance", "Program", "Volunteer", "Art Auction"] },
-              { title: "Art Collective", components: ["Curation", "Artist Outreach", "Venue", "Marketing", "Sales", "Documentation"] },
-              { title: "Conference", components: ["Program", "Speakers", "Sponsors", "Logistics", "A/V", "Registration"] },
-              { title: "Fundraiser", components: ["Outreach", "Donations", "Auction", "Entertainment", "Logistics", "Volunteers"] },
-            ].map(({ title, components }) => (
-              <div
-                key={title}
-                className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4"
-              >
-                <p className="text-xs font-semibold text-white/60 uppercase tracking-wide mb-3">
-                  {title}
+        {/* Component templates — pick saved templates to spin up as components on create */}
+        {orgId !== "no-org" && (
+          <div className="mt-8">
+            <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-1">
+              Start from templates
+            </p>
+            <p className="text-xs text-white/25 mb-4 leading-relaxed">
+              Optionally pick saved component templates — each becomes a component (with its activities &amp; tasks) in the new event, alongside Finance.
+            </p>
+
+            {templates.length === 0 ? (
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5 text-center">
+                <p className="text-sm text-white/50">No saved templates yet.</p>
+                <p className="text-xs text-white/30 mt-1 leading-relaxed">
+                  Save any component as a template from its page, then manage them under{" "}
+                  <Link href="/company/templates" className="text-emerald-400/80 hover:text-emerald-400 underline">
+                    Company → Templates
+                  </Link>.
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {components.map((c) => (
-                    <span
-                      key={c}
-                      className="text-xs bg-white/[0.05] border border-white/[0.08] text-white/40 px-2 py-0.5 rounded-full"
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
               </div>
-            ))}
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {templates.map((t) => {
+                  const selected = selectedTemplateIds.includes(t.id);
+                  const activityCount = Array.isArray(t.structure_json) ? t.structure_json.length : 0;
+                  const taskCount = Array.isArray(t.structure_json)
+                    ? t.structure_json.reduce((sum, a) => sum + (a.tasks?.length ?? 0), 0)
+                    : (Array.isArray(t.tasks_json) ? t.tasks_json.length : 0);
+                  return (
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => toggleTemplate(t.id)}
+                      aria-pressed={selected}
+                      className={`text-left rounded-xl p-4 border transition-all ${
+                        selected
+                          ? "border-emerald-500/60 bg-emerald-500/10"
+                          : "border-white/[0.06] bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 ${
+                            selected ? "bg-emerald-500 border-emerald-500 text-white" : "border-white/20 text-transparent"
+                          }`}
+                        >
+                          ✓
+                        </span>
+                        <span className="text-sm font-semibold text-white/80 truncate">{t.name}</span>
+                      </div>
+                      <p className="text-xs text-white/30 mt-2">
+                        {activityCount} {activityCount === 1 ? "activity" : "activities"} · {taskCount} {taskCount === 1 ? "task" : "tasks"}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <p className="text-xs text-white/25 mt-4 leading-relaxed">
-            Templates are for reference only — add components from event settings after creation.
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );
