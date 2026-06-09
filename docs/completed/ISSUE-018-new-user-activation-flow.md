@@ -2,7 +2,7 @@
 
 **Type:** Bug
 **Priority:** P0
-**Status:** Done — manual review passed 2026-06-09
+**Status:** Complete — merged to main via PR #11 (squash `3157318`), 2026-06-09
 **GitHub Issue:** #018
 
 ## Problem
