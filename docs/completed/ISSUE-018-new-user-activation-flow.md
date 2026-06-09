@@ -499,3 +499,26 @@ Every acceptance criterion across all six findings is implemented and verified b
 The activity-edit-only-name complaint the PRD attributed to `activities-tab.tsx` was actually the dashboard tab, already fixed in #5; the dead file was never reachable.
 
 **Verification:** `tsc --noEmit` → 0 errors; `next build` → success (19 routes). Residual brutalist scan across `src/**/*.tsx` → clean (only the color-swatch literal).
+
+---
+
+**Code review (high-effort recall, 7 angles) — 2026-06-09, commit `99035ca`:** PR #11 had no human/automated review comments (only the Vercel deploy bot). A local `/code-review` produced 10 findings; evaluated and actioned as follows.
+
+**Comments received:** 10 review findings (1 Vercel bot comment = noise, ignored). **Actionable applied: 7. Skipped: 2 (scope/risk). Refuted during review: 4** (Finance-component regression, edit-modal stale error on reopen, edit date truncation, noOrg `workspaceEvents` term — all shown false by reading the code).
+
+**Applied (7):**
+1. **/events guest divergence** — `events/page.tsx` `EmptyEventsState` was missing the `!hasWorkspace` guard the dashboard got in #1; a fresh workspace user with zero events saw the guest "not invited" state (no create button) on `/events`. Now mirrors `page.tsx`.
+2. **Tooltip stale-on-scroll** — `IconTooltip` computed `fixed` coords once on hover; inside `overflow-auto` lists it detached on scroll. Added scroll(capture)/resize listeners that reposition while shown (`show` memoized via `useCallback`).
+3. **Slug dedup at wrong altitude** — dedup lived only in `createEvent`; the Add-Component-from-template dialog passed a raw slug and could hit the `unique(event_id, slug)` constraint. Moved dedup into `instantiateTemplateComponent` (dedupes against the event's existing component slugs), so both callers are safe; removed `createEvent`'s manual loop.
+4. **Reporter shown in edit mode** — the REPORTER (AUTO) block rendered the current viewer even when editing someone else's activity. Now wrapped in `{!isEdit && …}`.
+5. **Finance insert fire-and-forget** — `createEvent` now captures and logs the Finance component insert error instead of ignoring it.
+6. **Template icon dropped** — template-spawned components now carry the template's `icon` (plumbed through `events.ts` select + `instantiateTemplateComponent` + the dialog path).
+7. **Duplicated `slugify`** — `NewEventForm` now imports the shared `slugify` from `lib/utils` instead of a byte-identical local copy.
+
+**Skipped (2):**
+- **Batch the per-row template inserts (efficiency)** — real N+1 (activities/tasks inserted one-at-a-time, templates instantiated sequentially), but a correct batch rewrite of the nested activity→task→subtask insert (with returned-id mapping) is risky without a test runner. Flagged as a follow-up; not a correctness defect.
+- **`getOrgTemplates` re-queries user/membership already fetched in `new/page.tsx`** — minor; fixing it means changing a shared function's signature (also called by `/company/templates`), out of scope for a feedback pass.
+
+**Also noted, intentionally not unified:** `PRESET_COLORS` is declared in three files and has drifted; unifying would change the user-facing swatch sets per dialog (a behavior decision), so left for a dedicated cleanup.
+
+**Verification after fixes:** `tsc --noEmit` → 0 errors; `next build` → success (19 routes). Pushed as `99035ca`.
