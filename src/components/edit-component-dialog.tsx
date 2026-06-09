@@ -71,7 +71,7 @@ export function EditComponentDialog({
 
       let changed = false;
       if (Object.keys(updates).length > 0) {
-        const result = await updateComponent(componentId, updates, eventSlug);
+        const result = await updateComponent(componentId, updates, eventSlug, componentSlug);
         if (result.error) { setError(result.error); return; }
         changed = true;
       }

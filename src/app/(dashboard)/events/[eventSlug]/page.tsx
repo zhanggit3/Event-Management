@@ -25,6 +25,20 @@ interface PageProps {
   params: Promise<{ eventSlug: string }>;
 }
 
+function getCountdown(dateStr: string): { label: string; variant: "upcoming" | "soon" | "past" | "today" } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return { label: "Today!", variant: "today" };
+  if (diff === 1) return { label: "Tomorrow", variant: "soon" };
+  if (diff > 1 && diff <= 14) return { label: `${diff} days away`, variant: "soon" };
+  if (diff > 14) return { label: `${diff} days away`, variant: "upcoming" };
+  if (diff === -1) return { label: "Yesterday", variant: "past" };
+  return { label: `${Math.abs(diff)} days ago`, variant: "past" };
+}
+
 export default async function EventDashboardPage({ params }: PageProps) {
   const { eventSlug } = await params;
   const supabase = await createClient();
@@ -179,20 +193,6 @@ export default async function EventDashboardPage({ params }: PageProps) {
   }
 
   if (!event) return null;
-
-  function getCountdown(dateStr: string): { label: string; variant: "upcoming" | "soon" | "past" | "today" } {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-    if (diff === 0) return { label: "Today!", variant: "today" };
-    if (diff === 1) return { label: "Tomorrow", variant: "soon" };
-    if (diff > 1 && diff <= 14) return { label: `${diff} days away`, variant: "soon" };
-    if (diff > 14) return { label: `${diff} days away`, variant: "upcoming" };
-    if (diff === -1) return { label: "Yesterday", variant: "past" };
-    return { label: `${Math.abs(diff)} days ago`, variant: "past" };
-  }
 
   const countdown = event.event_date ? getCountdown(event.event_date) : null;
 

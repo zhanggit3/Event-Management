@@ -60,9 +60,11 @@ export function TaskEditPanel({
   const [linkPopover, setLinkPopover] = useState(false);
   const [linkText, setLinkText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const [attachments, setAttachments] = useState<TaskAttachmentWithUploader[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,17 +79,20 @@ export function TaskEditPanel({
     setReporterId(task.reporter_id ?? "");
     setDueDate(task.due_date?.slice(0, 10) ?? "");
     setActivityId(task.activity_id ?? "");
+    setLoadError(null);
     loadComments();
     loadAttachments();
     loadSubTasks();
   }, [task.id]);
 
   async function loadComments() {
-    try { setComments((await getTaskComments(taskId)) ?? []); } catch { setComments([]); }
+    try { setComments((await getTaskComments(taskId)) ?? []); }
+    catch { setComments([]); setLoadError("Failed to load comments. Please try again."); }
   }
 
   async function loadAttachments() {
-    try { setAttachments((await getTaskAttachments(taskId)) ?? []); } catch { setAttachments([]); }
+    try { setAttachments((await getTaskAttachments(taskId)) ?? []); }
+    catch { setAttachments([]); setLoadError("Failed to load attachments. Please try again."); }
   }
 
   async function loadSubTasks() {
@@ -180,9 +185,9 @@ export function TaskEditPanel({
 
   function insertLink() {
     if (!linkText.trim() || !linkUrl.trim()) { setLinkPopover(false); return; }
-    if (!isSafeUrl(linkUrl)) { setLinkUrl(""); return; }
+    if (!isSafeUrl(linkUrl)) { setLinkError("URL must start with https:// or http://"); return; }
     setCommentBody((b) => b + `[${linkText.trim()}](${linkUrl.trim()})`);
-    setLinkText(""); setLinkUrl(""); setLinkPopover(false);
+    setLinkText(""); setLinkUrl(""); setLinkError(null); setLinkPopover(false);
     setTimeout(() => commentInputRef.current?.focus(), 10);
   }
 
@@ -411,6 +416,12 @@ export function TaskEditPanel({
               </div>
             </div>
 
+            {loadError && (
+              <div className="mb-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-xs text-red-400">{loadError}</p>
+              </div>
+            )}
+
             {/* Comments */}
             <div>
               <label className={labelCls}>Comments {comments.length > 0 && `(${comments.length})`}</label>
@@ -448,9 +459,10 @@ export function TaskEditPanel({
                       <div className="absolute left-0 bottom-full mb-1 w-64 bg-[#0D0D1C] border border-white/10 rounded-xl shadow-2xl shadow-black/60 p-3 z-10 space-y-2">
                         <input autoFocus value={linkText} onChange={(e) => setLinkText(e.target.value)} placeholder="Display text"
                           className="w-full text-xs rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1.5 text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 transition-all" />
-                        <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…"
+                        <input value={linkUrl} onChange={(e) => { setLinkUrl(e.target.value); if (linkError) setLinkError(null); }} placeholder="https://…"
                           className="w-full text-xs rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1.5 text-white placeholder:text-white/25 focus:outline-none focus:border-indigo-500/50 transition-all"
                           onKeyDown={(e) => { if (e.key === "Enter") insertLink(); }} />
+                        {linkError && <p className="text-[11px] text-red-400">{linkError}</p>}
                         <button onClick={insertLink} className="w-full h-7 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-lg text-xs font-semibold text-white">Insert</button>
                       </div>
                     )}

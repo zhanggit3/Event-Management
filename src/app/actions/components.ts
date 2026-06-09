@@ -365,7 +365,7 @@ export async function updateComponent(componentId: string, updates: {
   color?: string | null;
   is_active?: boolean;
   sort_order?: number;
-}, eventSlug: string) {
+}, eventSlug: string, componentSlug?: string) {
   const supabase = await createClient();
 
   if (updates.color && !HEX_COLOR_RE.test(updates.color)) {
@@ -389,6 +389,8 @@ export async function updateComponent(componentId: string, updates: {
 
   revalidatePath(`/events/${eventSlug}`);
   revalidatePath(`/events/${eventSlug}/settings`);
+  // Also refresh the component detail page so its header (name/icon/color) isn't stale.
+  if (componentSlug) revalidatePath(`/events/${eventSlug}/${componentSlug}`);
   return { success: true };
 }
 
