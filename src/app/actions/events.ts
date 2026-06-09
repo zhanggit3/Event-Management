@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
+import { instantiateTemplateComponent } from "@/lib/templates/instantiate";
 
 export async function createEvent(formData: FormData) {
   const supabase = await createClient();
@@ -15,6 +16,14 @@ export async function createEvent(formData: FormData) {
   const eventDate = formData.get("event_date") as string;
   const address = formData.get("address") as string;
   const orgId = formData.get("organization_id") as string;
+  const templateIdsRaw = formData.get("template_ids") as string | null;
+  let templateIds: string[] = [];
+  if (templateIdsRaw) {
+    try {
+      const parsed = JSON.parse(templateIdsRaw);
+      if (Array.isArray(parsed)) templateIds = parsed.filter((x): x is string => typeof x === "string");
+    } catch { /* ignore malformed selection */ }
+  }
 
   if (!name?.trim()) return { error: "Event name is required" };
 
@@ -50,6 +59,39 @@ export async function createEvent(formData: FormData) {
       sort_order: 0,
       is_active: true,
     });
+
+  // Spin up any component templates the user selected on the Create Event form (ISSUE-018 #6).
+  // Org-scoped fetch validates ownership; slugs are deduped against Finance and each other.
+  if (templateIds.length > 0 && user) {
+    const { data: templates } = await supabase
+      .from("component_templates")
+      .select("id, name, color, tasks_json, structure_json")
+      .in("id", templateIds)
+      .eq("organization_id", orgId);
+
+    const usedSlugs = new Set<string>(["finance"]);
+    let sortOrder = 1;
+    for (const t of templates ?? []) {
+      const base = slugify(t.name as string) || "component";
+      let unique = base;
+      let n = 2;
+      while (usedSlugs.has(unique)) unique = `${base}-${n++}`;
+      usedSlugs.add(unique);
+
+      const res = await instantiateTemplateComponent(supabase, {
+        eventId: event.id,
+        name: t.name as string,
+        slug: unique,
+        color: (t.color as string) || null,
+        sortOrder: sortOrder++,
+        tasksJson: t.tasks_json ? JSON.stringify(t.tasks_json) : null,
+        structureRaw: t.structure_json ? JSON.stringify(t.structure_json) : null,
+        userId: user.id,
+      });
+      // Non-fatal: a failed template doesn't block event creation, but surface it in logs.
+      if (res.error) console.error(`createEvent: template ${t.id} instantiation failed`, res.error);
+    }
+  }
 
   revalidatePath("/");
   return { slug: event.slug };
