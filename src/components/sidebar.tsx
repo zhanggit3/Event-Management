@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, Zap, ChevronDown, Menu, X, Briefcase } from "lucide-react";
+import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, ChevronDown, Menu, X, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notification-bell";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
+import { DionyLogo } from "@/components/diony-logo";
 
 interface SidebarProps {
   organizations: {
@@ -84,7 +85,7 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
           <Menu className="w-5 h-5" />
         </button>
         <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
-          <Zap className="w-4 h-4 text-white" />
+          <DionyLogo className="w-4 h-4 text-white" />
         </div>
       </div>
 
@@ -112,9 +113,9 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
 
         {/* App logo */}
         <div className="flex items-center justify-center h-14 border-b border-white/[0.06] shrink-0">
-          <IconTooltip label="Vibe">
+          <IconTooltip label="Diony">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25 cursor-default">
-              <Zap className="w-4 h-4 text-white" />
+              <DionyLogo className="w-4 h-4 text-white" />
             </div>
           </IconTooltip>
         </div>

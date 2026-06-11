@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { consumeInviteToken } from "@/app/actions/invites";
-import { Zap } from "lucide-react";
+import { DionyLogo } from "@/components/diony-logo";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -77,7 +77,7 @@ function LoginForm() {
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Zap className="w-5 h-5 text-white" />
+            <DionyLogo className="w-5 h-5 text-white" />
           </div>
         </div>
 

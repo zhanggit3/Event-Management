@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; VibeEvents/1.0; +https://vibe.events)",
+        "User-Agent": "Mozilla/5.0 (compatible; Diony/1.0; +https://diony.com)",
         Accept: "text/html,application/xhtml+xml",
       },
       signal: AbortSignal.timeout(5000),

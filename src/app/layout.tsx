@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Event Platform",
+  title: "Diony",
   description: "Collaborative event management for your team",
 };
 

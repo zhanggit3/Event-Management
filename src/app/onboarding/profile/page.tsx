@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { ChevronLeft, Check, Zap, Building2, User2, Briefcase } from "lucide-react";
+import { ChevronLeft, Check, Building2, User2, Briefcase } from "lucide-react";
+import { DionyLogo } from "@/components/diony-logo";
 import { updateProfile } from "@/app/actions/profile";
 import { createOrganization, createWorkspace } from "@/app/actions/organizations";
 import { consumeInviteToken } from "@/app/actions/invites";
@@ -133,7 +134,7 @@ export default function OnboardingProfilePage() {
         {/* Logo */}
         <div className="flex justify-center mb-10">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-            <Zap className="w-5 h-5 text-white" />
+            <DionyLogo className="w-5 h-5 text-white" />
           </div>
         </div>
 

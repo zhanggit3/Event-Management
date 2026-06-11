@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Sparkles } from "lucide-react";
+import { DionyLogo } from "@/components/diony-logo";
 
 interface InviteContext {
   orgName: string;
@@ -73,8 +73,8 @@ function SignupForm() {
       <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-8 backdrop-blur-sm shadow-2xl shadow-black/40">
         {/* Logo */}
         <div className="flex justify-center mb-6">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <DionyLogo className="w-5 h-5 text-white" />
           </div>
         </div>
 
