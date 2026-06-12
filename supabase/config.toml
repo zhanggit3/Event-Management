@@ -1,0 +1,7 @@
+project_id = "sljvlxipnlkqruxlqdsf"
+
+# Auth "Send Email" hook handler. Called by GoTrue with a Standard Webhooks
+# signature (not a user JWT), so JWT verification must stay disabled — the
+# function verifies SEND_EMAIL_HOOK_SECRET itself.
+[functions.send-email]
+verify_jwt = false

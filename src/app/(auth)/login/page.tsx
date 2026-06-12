@@ -10,6 +10,7 @@ import { DionyLogo } from "@/components/diony-logo";
 function LoginForm() {
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite");
+  const resetSuccess = searchParams.get("reset") === "success";
 
   const [inviteOrgName, setInviteOrgName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +91,12 @@ function LoginForm() {
             : "Sign in to your event management workspace"}
         </p>
 
+        {resetSuccess && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-300 text-center">
+            Password updated — sign in with your new password.
+          </div>
+        )}
+
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">
@@ -113,9 +120,14 @@ function LoginForm() {
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="password" className="block text-xs font-medium text-white/50 uppercase tracking-wider">
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="password" className="block text-xs font-medium text-white/50 uppercase tracking-wider">
+                Password
+              </label>
+              <Link href="/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               name="password"

@@ -5,6 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PREFIXES = [
   "/login",
   "/signup",
+  "/forgot-password",
+  "/reset-password",
   "/invite",
   "/join",
   "/auth/callback",
