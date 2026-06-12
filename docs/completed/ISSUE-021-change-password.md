@@ -2,7 +2,7 @@
 
 **Type:** Feature
 **Priority:** P1
-**Status:** In Review
+**Status:** Complete
 **GitHub Issue:** #21
 
 ## Problem
