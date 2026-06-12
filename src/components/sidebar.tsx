@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, ChevronDown, Menu, X, Briefcase } from "lucide-react";
+import { CalendarDays, Settings, LogOut, Plus, LayoutDashboard, Building2, ChevronDown, Menu, X, Briefcase, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notification-bell";
 import { IconTooltip } from "@/components/ui/icon-tooltip";
 import { DionyLogo } from "@/components/diony-logo";
+import { ChangePasswordModal } from "@/components/change-password-modal";
 
 interface SidebarProps {
   organizations: {
@@ -42,6 +43,7 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Close the mobile drawer whenever the route changes (e.g. tapping a nav link).
   // Uses React's "adjust state during render from a previous value" pattern
@@ -65,13 +67,15 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
   // The rail is a top-level switcher; the panel below shows the active section's context.
   // "dashboard" must be an EXACT match for "/" — otherwise fallthrough routes like
   // /settings would light up the Dashboard icon and render the Overview panel.
-  const activeSection: "dashboard" | "events" | "company" | "other" = pathname.startsWith("/company")
+  const activeSection: "dashboard" | "events" | "company" | "settings" | "other" = pathname.startsWith("/company")
     ? "company"
     : pathname.startsWith("/events")
       ? "events"
-      : (pathname === "/" || pathname.startsWith("/my-work"))
-        ? "dashboard"
-        : "other";
+      : pathname.startsWith("/settings")
+        ? "settings"
+        : (pathname === "/" || pathname.startsWith("/my-work"))
+          ? "dashboard"
+          : "other";
 
   return (
     <>
@@ -239,6 +243,34 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
 
           {activeSection === "company" && <CompanyPanel pathname={pathname} />}
 
+          {activeSection === "settings" && (
+            <>
+              <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
+                Settings
+              </p>
+              <Link
+                href="/settings"
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors font-medium",
+                  pathname === "/settings"
+                    ? "bg-indigo-500/15 text-indigo-300"
+                    : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]",
+                )}
+              >
+                <Building2 className={cn("w-3.5 h-3.5 shrink-0", pathname === "/settings" ? "text-indigo-400" : "text-white/30")} />
+                <span className="flex-1 truncate">Organization</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => { setShowChangePassword(true); setMobileOpen(false); }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+              >
+                <Lock className="w-3.5 h-3.5 shrink-0 text-white/30" />
+                <span className="flex-1 truncate text-left">Change password</span>
+              </button>
+            </>
+          )}
+
           {activeSection === "dashboard" && (
             <>
               <p className="px-2 pt-1 pb-1 text-[10px] font-medium uppercase tracking-wider text-white/25">
@@ -273,6 +305,14 @@ export function Sidebar({ organizations, allEvents, workspaceEvents, firstName, 
         </nav>
       </div>
     </aside>
+
+      {showChangePassword && (
+        <ChangePasswordModal
+          email={userEmail}
+          open
+          onClose={() => setShowChangePassword(false)}
+        />
+      )}
     </>
   );
 }
