@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { slugify } from "@/lib/utils";
+import { slugify, isValidEmail } from "@/lib/utils";
+import { sendInviteEmail, expiresLabel } from "@/lib/email/invite-email";
+import { isEmailConfigured } from "@/lib/email/client";
+import { getInviterIdentity } from "@/app/actions/invites";
 
 export async function createOrganization(formData: FormData) {
   const supabase = await createClient();
@@ -86,6 +89,7 @@ export async function inviteMember(formData: FormData) {
   const role = ((formData.get("role") as string) || "member") as "member" | "admin";
 
   if (!email) return { error: "Email is required" };
+  if (!isValidEmail(email)) return { error: "Please enter a valid email address" };
 
   // Verify caller is admin/owner
   const { data: membership } = await supabase
@@ -134,8 +138,30 @@ export async function inviteMember(formData: FormData) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const inviteUrl = `${siteUrl}/invite/${tokenData.token}`;
 
+  // Resolve org + inviter names for the email, then send (non-fatal on failure).
+  const emailConfigured = isEmailConfigured();
+  let emailSent = false;
+  if (emailConfigured) {
+    // Independent lookups — run concurrently.
+    const [{ data: org }, inviter] = await Promise.all([
+      supabase.from("organizations").select("name").eq("id", orgId).single(),
+      getInviterIdentity(supabase, user.id),
+    ]);
+    const send = await sendInviteEmail({
+      to: email,
+      replyTo: inviter.email,
+      inviterName: inviter.name,
+      scope: "organization",
+      scopeName: org?.name ?? "an organization",
+      role,
+      inviteUrl,
+      expiresLabel: expiresLabel(48),
+    });
+    emailSent = send.sent;
+  }
+
   revalidatePath("/settings");
-  return { success: true, inviteUrl, email };
+  return { success: true, inviteUrl, email, emailSent, emailConfigured };
 }
 
 export async function removeMember(memberId: string, orgId: string) {

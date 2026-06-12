@@ -14,6 +14,7 @@ import {
   addEventCollaboratorComponentGrant,
   removeEventCollaboratorComponentGrant,
 } from "@/app/actions/invites";
+import { isValidEmail } from "@/lib/utils";
 
 type ComponentSummary = {
   id: string;
@@ -59,6 +60,10 @@ export function EventCollaboratorsPanel({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [selectedComponents, setSelectedComponents] = useState<Set<string>>(new Set());
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [sentToEmail, setSentToEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailConfigured, setEmailConfigured] = useState(true);
   const [copied, setCopied] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -81,6 +86,10 @@ export function EventCollaboratorsPanel({
     if (!v) {
       setSelectedComponents(new Set());
       setGeneratedUrl(null);
+      setInviteEmail("");
+      setSentToEmail("");
+      setEmailSent(false);
+      setEmailConfigured(true);
       setCopied(false);
       setInviteError(null);
     }
@@ -88,16 +97,26 @@ export function EventCollaboratorsPanel({
 
   function handleGenerateLink() {
     setInviteError(null);
+    const email = inviteEmail.trim();
+    if (email && !isValidEmail(email)) {
+      setInviteError("Please enter a valid email address");
+      return;
+    }
     startTransition(async () => {
       const result = await createEventInviteWithComponents(
         organizationId,
         eventId,
-        Array.from(selectedComponents)
+        Array.from(selectedComponents),
+        48,
+        email || undefined
       );
       if (result.error) {
         setInviteError(result.error);
       } else if (result.data) {
         setGeneratedUrl(result.data.inviteUrl);
+        setEmailSent(result.data.emailSent);
+        setEmailConfigured(result.data.emailConfigured);
+        setSentToEmail(email);
       }
     });
   }
@@ -221,6 +240,19 @@ export function EventCollaboratorsPanel({
                   )}
                 </div>
 
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">
+                    Email <span className="normal-case font-normal text-white/30">(optional — send the link directly)</span>
+                  </p>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); if (inviteError) setInviteError(null); }}
+                    placeholder="name@example.com"
+                    className="w-full h-10 px-3 bg-white/[0.03] border border-white/[0.07] rounded-xl text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
                 {inviteError && (
                   <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
                     <p className="text-sm text-red-400">{inviteError}</p>
@@ -254,6 +286,19 @@ export function EventCollaboratorsPanel({
               </div>
             ) : (
               <div className="space-y-4">
+                {sentToEmail && emailSent ? (
+                  <div className="rounded-xl px-4 py-2.5 text-sm bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
+                    Invite emailed to <span className="font-semibold">{sentToEmail}</span>. You can also copy the link below.
+                  </div>
+                ) : sentToEmail && emailConfigured ? (
+                  <div className="rounded-xl px-4 py-2.5 text-sm bg-amber-500/10 border border-amber-500/25 text-amber-400">
+                    Couldn&apos;t send the email — copy the link below and share it manually.
+                  </div>
+                ) : sentToEmail ? (
+                  <div className="rounded-xl px-4 py-2.5 text-sm bg-white/[0.04] border border-white/[0.08] text-white/50">
+                    Email delivery isn&apos;t set up — copy the link below to share it.
+                  </div>
+                ) : null}
                 <p className="text-sm text-white/60">
                   Share this link with your collaborator. It can only be used once.
                 </p>
