@@ -5,6 +5,22 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { InviteTokenWithOrg } from "@/types/database";
 import { createNotificationInternal } from "@/app/actions/notifications";
+import { isValidEmail } from "@/lib/utils";
+import { sendInviteEmail, expiresLabel } from "@/lib/email/invite-email";
+import { isEmailConfigured } from "@/lib/email/client";
+
+/** Look up the current user's display name for invite emails. */
+export async function getInviterIdentity(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<{ name: string; email?: string }> {
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", userId)
+    .single();
+  return { name: prof?.full_name || prof?.email || "A team member", email: prof?.email ?? undefined };
+}
 
 /**
  * Create an event-scoped invite token that pre-selects specific component grants.
@@ -15,8 +31,9 @@ export async function createEventInviteWithComponents(
   organizationId: string,
   eventId: string,
   componentIds: string[],
-  expiresInHours: number = 48
-): Promise<{ data?: { token: string; inviteUrl: string }; error?: string }> {
+  expiresInHours: number = 48,
+  email?: string
+): Promise<{ data?: { token: string; inviteUrl: string; emailSent: boolean; emailConfigured: boolean }; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -34,6 +51,11 @@ export async function createEventInviteWithComponents(
 
   if (componentIds.length === 0) return { error: "Select at least one component" };
 
+  const cleanEmail = email?.toLowerCase().trim() || undefined;
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    return { error: "Please enter a valid email address" };
+  }
+
   const expiresAt = new Date(Date.now() + expiresInHours * 3600 * 1000).toISOString();
 
   const { data: tokenRow, error: tokenErr } = await supabase
@@ -41,7 +63,7 @@ export async function createEventInviteWithComponents(
     .insert({
       organization_id: organizationId,
       invited_by: user.id,
-      email: null,
+      email: cleanEmail ?? null,
       role: "member" as const,
       invite_type: "event" as const,
       event_id: eventId,
@@ -59,8 +81,31 @@ export async function createEventInviteWithComponents(
   if (grantErr) return { error: grantErr.message };
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const inviteUrl = `${siteUrl}/invite/${tokenRow.token}`;
+
+  const emailConfigured = isEmailConfigured();
+  let emailSent = false;
+  if (cleanEmail && emailConfigured) {
+    // Independent lookups — run concurrently.
+    const [{ data: ev }, inviter] = await Promise.all([
+      supabase.from("events").select("name").eq("id", eventId).single(),
+      getInviterIdentity(supabase, user.id),
+    ]);
+    const send = await sendInviteEmail({
+      to: cleanEmail,
+      replyTo: inviter.email,
+      inviterName: inviter.name,
+      scope: "event",
+      scopeName: ev?.name ?? "an event",
+      role: "member",
+      inviteUrl,
+      expiresLabel: expiresLabel(expiresInHours),
+    });
+    emailSent = send.sent;
+  }
+
   revalidatePath(`/events`);
-  return { data: { token: tokenRow.token, inviteUrl: `${siteUrl}/invite/${tokenRow.token}` } };
+  return { data: { token: tokenRow.token, inviteUrl, emailSent, emailConfigured } };
 }
 
 /**
@@ -151,8 +196,9 @@ export async function createShareableInviteToken(
   inviteType: InviteScope,
   role: "member" | "admin" | "lead",
   scopeId?: string, // event_id for event scope, component_id for component scope
-  expiresInHours: number = 48
-): Promise<{ data?: { token: string; inviteUrl: string }; error?: string }> {
+  expiresInHours: number = 48,
+  email?: string
+): Promise<{ data?: { token: string; inviteUrl: string; emailSent: boolean; emailConfigured: boolean }; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -168,12 +214,17 @@ export async function createShareableInviteToken(
     return { error: "Insufficient permissions" };
   }
 
+  const cleanEmail = email?.toLowerCase().trim() || undefined;
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    return { error: "Please enter a valid email address" };
+  }
+
   const expiresAt = new Date(Date.now() + expiresInHours * 3600 * 1000).toISOString();
 
   const insert: Record<string, unknown> = {
     organization_id: organizationId,
     invited_by: user.id,
-    email: null,
+    email: cleanEmail ?? null,
     role,
     invite_type: inviteType,
     expires_at: expiresAt,
@@ -191,8 +242,46 @@ export async function createShareableInviteToken(
   if (error) return { error: error.message };
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const inviteUrl = `${siteUrl}/invite/${data.token}`;
+
+  const emailConfigured = isEmailConfigured();
+  let emailSent = false;
+  if (cleanEmail && emailConfigured) {
+    // Scope-name lookup and inviter identity are independent — run concurrently.
+    const scopeNamePromise = (async (): Promise<string> => {
+      if (inviteType === "organization") {
+        const { data: org } = await supabase.from("organizations").select("name").eq("id", organizationId).single();
+        return org?.name ?? "an organization";
+      } else if (inviteType === "event" && scopeId) {
+        const { data: ev } = await supabase.from("events").select("name").eq("id", scopeId).single();
+        return ev?.name ?? "an event";
+      } else if (inviteType === "component" && scopeId) {
+        const { data: comp } = await supabase.from("components").select("name").eq("id", scopeId).single();
+        return comp?.name ?? "a component";
+      }
+      return "an organization";
+    })();
+
+    const [scopeName, inviter] = await Promise.all([
+      scopeNamePromise,
+      getInviterIdentity(supabase, user.id),
+    ]);
+
+    const send = await sendInviteEmail({
+      to: cleanEmail,
+      replyTo: inviter.email,
+      inviterName: inviter.name,
+      scope: inviteType,
+      scopeName,
+      role,
+      inviteUrl,
+      expiresLabel: expiresLabel(expiresInHours),
+    });
+    emailSent = send.sent;
+  }
+
   revalidatePath("/settings");
-  return { data: { token: data.token, inviteUrl: `${siteUrl}/invite/${data.token}` } };
+  return { data: { token: data.token, inviteUrl, emailSent, emailConfigured } };
 }
 
 /**

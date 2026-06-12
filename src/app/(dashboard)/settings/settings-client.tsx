@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Building2, Users, UserPlus, Trash2, CheckCircle, XCircle, Ban, Shield, Copy, Check, Link, Lock, ChevronDown, Plus } from "lucide-react";
-import { getInitials, formatDate } from "@/lib/utils";
+import { getInitials, formatDate, isValidEmail } from "@/lib/utils";
 import type { MemberWithProfile, JoinRequestWithProfile, BlockedUserWithProfile, ComponentAccessRequestWithDetails } from "@/types/database";
 import type { InviteScope } from "@/app/actions/invites";
 
@@ -15,8 +15,8 @@ interface OrgEvent {
 
 interface Actions {
   createShareableInviteToken: (
-    orgId: string, type: InviteScope, role: "member" | "admin" | "lead", scopeId?: string, expiresInHours?: number
-  ) => Promise<{ data?: { token: string; inviteUrl: string }; error?: string }>;
+    orgId: string, type: InviteScope, role: "member" | "admin" | "lead", scopeId?: string, expiresInHours?: number, email?: string
+  ) => Promise<{ data?: { token: string; inviteUrl: string; emailSent: boolean; emailConfigured: boolean }; error?: string }>;
   removeMember: (memberId: string, orgId: string) => Promise<{ error?: string }>;
   updateMemberRole: (memberId: string, role: string, orgId: string) => Promise<{ error?: string }>;
   approveJoinRequest: (requestId: string) => Promise<{ error?: string }>;
@@ -31,6 +31,9 @@ interface Actions {
 interface InviteLinkModal {
   url: string;
   label: string;
+  emailSent?: boolean;
+  emailConfigured?: boolean;
+  email?: string;
 }
 
 interface Props {
@@ -119,6 +122,7 @@ export function SettingsClient({
   const [inviteScopeId, setInviteScopeId] = useState("");
   const [inviteRole, setInviteRole] = useState<"member" | "admin" | "lead">("member");
   const [inviteExpiry, setInviteExpiry] = useState(48);
+  const [inviteEmail, setInviteEmail] = useState("");
 
   // Modals
   const [blockModal, setBlockModal] = useState<BlockModal | null>(null);
@@ -160,16 +164,28 @@ export function SettingsClient({
       setInviteError(`Please select a ${inviteType} first.`);
       return;
     }
+    const email = inviteEmail.trim();
+    if (email && !isValidEmail(email)) {
+      setInviteError("Please enter a valid email address");
+      return;
+    }
     startTransition(async () => {
       const result = await actions.createShareableInviteToken(
-        organization.id, inviteType, inviteRole, scopeId, inviteExpiry
+        organization.id, inviteType, inviteRole, scopeId, inviteExpiry, email || undefined
       );
       if (result.error) { setInviteError(result.error); return; }
       if (result.data) {
         const typeLabel = inviteType === "organization" ? "Org"
           : inviteType === "event" ? `Event: ${orgEvents.find(e=>e.id===scopeId)?.name ?? ""}`
           : `Component: ${componentOptions.find(c=>c.id===scopeId)?.name ?? ""}`;
-        setInviteLinkModal({ url: result.data.inviteUrl, label: typeLabel });
+        setInviteLinkModal({
+          url: result.data.inviteUrl,
+          label: typeLabel,
+          emailSent: result.data.emailSent,
+          emailConfigured: result.data.emailConfigured,
+          email: email || undefined,
+        });
+        setInviteEmail("");
       }
     });
   }
@@ -474,6 +490,15 @@ export function SettingsClient({
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
                     </div>
                   )}
+
+                  {/* Optional email — sends the invite link to this address */}
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => { setInviteEmail(e.target.value); if (inviteError) setInviteError(null); }}
+                    placeholder="Email (optional) — send the link directly"
+                    className="w-full h-9 px-3 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-sky-500/50"
+                  />
 
                   {/* Role + Expiry + Generate */}
                   <div className="flex gap-2">
@@ -837,6 +862,9 @@ export function SettingsClient({
         <InviteLinkModalDialog
           url={inviteLinkModal.url}
           label={inviteLinkModal.label}
+          emailSent={inviteLinkModal.emailSent}
+          emailConfigured={inviteLinkModal.emailConfigured}
+          email={inviteLinkModal.email}
           onClose={() => setInviteLinkModal(null)}
         />
       )}
@@ -961,10 +989,16 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
 function InviteLinkModalDialog({
   url,
   label,
+  emailSent,
+  emailConfigured,
+  email,
   onClose,
 }: {
   url: string;
   label: string;
+  emailSent?: boolean;
+  emailConfigured?: boolean;
+  email?: string;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -994,8 +1028,29 @@ function InviteLinkModalDialog({
 
         <h2 className="text-lg font-semibold text-white text-center mb-1">Invite Link Created</h2>
         <p className="text-sm text-center text-white/40 mb-5">
-          Scope: <span className="text-white/70">{label}</span>. Anyone with this link can join.
+          Scope: <span className="text-white/70">{label}</span>.{" "}
+          {email
+            ? <>Only <span className="text-white/70">{email}</span> can accept this invite.</>
+            : <>Anyone with this link can join.</>}
         </p>
+
+        {email && (
+          <div
+            className={`rounded-xl px-4 py-2.5 mb-4 text-sm text-center ${
+              emailSent
+                ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
+                : emailConfigured
+                  ? "bg-amber-500/10 border border-amber-500/25 text-amber-400"
+                  : "bg-white/[0.04] border border-white/[0.08] text-white/50"
+            }`}
+          >
+            {emailSent
+              ? <>Invite emailed to <span className="font-semibold">{email}</span></>
+              : emailConfigured
+                ? <>Couldn&apos;t send the email — copy the link below and share it manually.</>
+                : <>Email delivery isn&apos;t set up — copy the link below to share it.</>}
+          </div>
+        )}
 
         {/* Link display */}
         <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-3 mb-4">

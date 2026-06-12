@@ -47,6 +47,10 @@ export function formatNoteTimestamp(iso: string): string {
   }).format(date);
 }
 
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")
